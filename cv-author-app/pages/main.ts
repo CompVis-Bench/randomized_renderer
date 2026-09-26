@@ -15,6 +15,8 @@ const TYPES: Record<string, Definition> = {
   grouped_bar: { channels: ['position.x', 'position.y', 'position.x_offset', 'position.y_offset', 'color'], required: ['position.x', 'position.y'] },
   rect_heatmap: { channels: ['position.x', 'position.y', 'color'], required: ['position.x', 'position.y', 'color'] },
   'pie/donut/radial_bar': { channels: ['position.theta', 'position.radius', 'color'], required: ['position.theta', 'color'] },
+  single_radar: { channels: ['position.theta', 'position.radius'], required: ['position.theta', 'position.radius'] },
+  multi_radar: { channels: ['position.theta', 'position.radius', 'color'], required: ['position.theta', 'position.radius', 'color'] },
   single_boxplot: { channels: ['position.x', 'position.y', 'color'], required: ['position.x', 'position.y'] },
   violin: { channels: ['position.x', 'position.y'], required: ['position.x', 'position.y'] },
   contour: { channels: ['position.x', 'position.y', 'color'], required: ['position.x', 'position.y'] },
@@ -81,7 +83,7 @@ function render() {
   const value = JSON.parse(annotation.value); validateAnnotation(value);
   const usedSeed = seedValue(); const result = buildRandomizedAnnotation(value, { seed: usedSeed, geometry });
   currentSvg = window.offlineRenderer.render(result.scene); preview.innerHTML = currentSvg;
-  const node = preview.querySelector('svg'); node?.removeAttribute('width'); node?.removeAttribute('height'); node?.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  const node = preview.querySelector('svg'); node?.setAttribute('preserveAspectRatio', 'xMidYMid meet');
   $('status').textContent = `Rendered · seed ${usedSeed} · ${result.scene.width} × ${result.scene.height}`;
 }
 function download(name: string, type: string, text: string) { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([text], { type })); link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }

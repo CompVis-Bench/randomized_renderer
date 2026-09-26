@@ -39,9 +39,17 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
  for(const [k,v] of Object.entries(policy))check(Number.isFinite(v)&&(k.endsWith('Probability')?v>=0&&v<=1:Number.isInteger(v)&&v>0),`Invalid policy.${k}`);
  check(policy.minRepetitions>=2&&policy.maxRepetitions>=policy.minRepetitions&&policy.maxRepetitions<=6,'Repetition counts must be in [2,6]');
  check(Number.isInteger(seed)&&seed>=0&&seed<=0xffffffff,'seed must be a uint32');
- const random=rng(seed),pick=a=>a[Math.floor(random()*a.length)];
+ const random=rng(seed),pick=a=>a[Math.floor(random()*a.length)],integer=(min,max)=>min+Math.floor(random()*(max-min+1));
  const annotation=structuredClone(input), frozen=JSON.stringify(annotation),charts=annotation.charts;
  const decisions=[],domains={},categorical=new Set(),rep=new Set(charts.flatMap(c=>c.external_encodings.position));
+ // Keep field domains compact and chart appropriate. A shared field gets the
+ // intersection of the ranges requested by every chart that uses it.
+ const domainHints=new Map();
+ const hint=(field,min,max)=>{
+  if(!field)return;
+  const previous=domainHints.get(field);
+  domainHints.set(field,previous?{min:Math.max(previous.min,min),max:Math.min(previous.max,max)}:{min,max});
+ };
  const cfg=new Map(),numericViews=new Set(['point','connected_scatterplot','single_line','multi_line','plain_area','contour','dotplot','tick_plot']);
  for(const c of charts){
   const e=c.encodings,k=c.variation;
@@ -49,9 +57,10 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
   const implemented=new Set(basisChannels[k]??[]);
   if(k==='circlepacking')implemented.delete('color');
   if(k==='tree')for(const ch of ['color','size','stroke.color','stroke.width'])implemented.add(ch);
+  if(k==='multi_radar')implemented.add('color');
   for(const ch of Object.keys(e))check(implemented.has(ch),`${c.chart_id}: renderer does not yet implement ${k}.${ch}`);
   check(!(['point','connected_scatterplot','multi_line'].includes(k)&&e['position.theta']),`${c.chart_id}: polar ${k} requires a renderer extension`);
-  check(!(['single_radar','multi_radar'].includes(k)&&e.color),`${c.chart_id}: radar color is not implemented`);
+  // Radar color is rendered as the series color in the basis adapter.
   if(k==='link'){check(c.link_targets.length>0,`${c.chart_id}: cannot render unidentified link targets`);check(!c.external_encodings.size&&!c.external_encodings.color,`${c.chart_id}: external size/color on a link is not yet implemented`);}
   if(k==='euler_venn')check(e.color,`${c.chart_id}: Venn synthesis requires a color field`);
   const horizontal=!!e['position.y_offset']||bars.includes(k)&&!e['position.y'];
@@ -63,8 +72,28 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
   if(bars.includes(k)&&e[horizontal?'position.y':'position.x'])categorical.add(e[horizontal?'position.y':'position.x']);
   if(['rect_heatmap','calendar_heatmap','hexbin'].includes(k))for(const ch of ['position.x','position.y'])if(e[ch])categorical.add(e[ch]);
   if(k==='parallel_coordinates')categorical.add(e['position.x']);
+  for(const [ch,f] of Object.entries(e)){
+   if(ch==='position.theta')hint(f,3,10); // radar/polar categories: never fewer than 3 or more than 10
+   else if(ch==='position.radius')hint(f,5,10);
+   else if(ch.endsWith('_offset'))hint(f,2,4);
+   else if(ch==='color'||ch==='shape'||ch==='text'||ch==='stroke.color')hint(f,4,8);
+   else if(ch==='position.x'||ch==='position.y'){
+    const compact=['bar','stacked_bar','grouped_bar','rect_heatmap','calendar_heatmap','hexbin','single_boxplot','multi_boxplot','violin','parallel_coordinates'].includes(k);
+    hint(f,compact?4:8,compact?8:14);
+   }
+  }
  }
- for(const f of uniq(charts.flatMap(fields))){const n=rep.has(f)?policy.minRepetitions+Math.floor(random()*(policy.maxRepetitions-policy.minRepetitions+1)):categorical.has(f)?6:16;domains[f]=Array.from({length:n},(_,i)=>categorical.has(f)||rep.has(f)?i+1:12+i*5);}
+ for(const f of uniq(charts.flatMap(fields))){
+  if(rep.has(f)){
+   const n=policy.minRepetitions+Math.floor(random()*(policy.maxRepetitions-policy.minRepetitions+1));
+   domains[f]=Array.from({length:n},(_,i)=>i+1);
+   continue;
+  }
+  const requested=domainHints.get(f)??(categorical.has(f)?{min:4,max:8}:{min:8,max:14});
+  const min=Math.max(3,requested.min),max=Math.max(min,requested.max);
+  const n=integer(min,max);
+  domains[f]=Array.from({length:n},(_,i)=>categorical.has(f)?i+1:12+i*5);
+ }
  for(const c of charts){const e=c.encodings;
   if(e.text)domains[e.text]=['Energy','Water','Forest','Climate','Urban','Soil','River','Ocean','Carbon','Solar','Wind','Rain'];
   if(c.variation.startsWith('geo_')){const centers=geometry.features.map(geoCentroid);if(e['position.x'])domains[e['position.x']]=uniq(centers.map(p=>p[0]));if(e['position.y'])domains[e['position.y']]=uniq(centers.map(p=>p[1]));}
@@ -106,7 +135,14 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
   const direction=random()<.5?'horizontal':'vertical';
   return {type:'concat',direction,gap:28,children:out.map(n=>n.node),weights:out.map(()=>.8+random()*.4)};
  }
- function repeat(field,child){const layout=facetLayout(domains[field].length,random);decisions.push({kind:'facet',field,...layout});return {type:'repeat',field,values:domains[field],...layout,child};}
+ function repeat(field,child){
+  const layout=facetLayout(domains[field].length,random);
+  // Keep repeated charts readable on the page. Four columns gives every
+  // facet a stable cell while avoiding a single ultra-wide strip.
+  layout.columns=Math.min(layout.columns,4);
+  decisions.push({kind:'facet',field,...layout});
+  return {type:'repeat',field,values:domains[field],...layout,child};
+ }
  check(nodes.length>0,'At least one non-link template is required');
  let composition=combine(nodes);
  // Independent repetitions may also be realized as a hidden coordinate scaffold.
@@ -153,7 +189,16 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
  for(const c of renderCharts)c.spec.offlineOptions.fieldDomains=scaleDomains;
  const legacy={sample_id:'random-'+seed,charts:charts.map(c=>({chart_id:c.chart_id,variation:c.variation,encodings:c.encodings,repetition_position:c.external_encodings.position}))};
  const plan={charts:renderCharts.map(c=>({id:c.id,datasetId:c.spec.datasetId,basis:c.spec.offlineOptions})),datasets};enrichVenn({annotation:legacy,plan});
- function measure(n){if(typeof n==='string')return [360,280];if(n.type==='scaffold'){const [w,h]=measure(n.child);return [w*domains[n.fields[0]].length+70,h*domains[n.fields[1]].length+50];}if(n.type==='nest'){const child=measure(n.child);return [Math.max(950,child[0]*3),Math.max(740,child[1]*3)];}if(n.type==='repeat'){const [w,h]=measure(n.child),cols=n.columns,rows=Math.ceil(n.values.length/cols);return [cols*w+(cols-1)*20,rows*(h+24)+(rows-1)*20];}if(n.type==='layer')return [430,330];const sizes=n.children.map(measure),axis=n.direction==='horizontal'?0:1;return [0,1].map(i=>i===axis?sizes.reduce((s,v)=>s+v[i],0)+(sizes.length-1)*n.gap:Math.max(...sizes.map(v=>v[i])));}
+ function chartSize(id){
+  const variation=byId.get(id)?.variation;
+  if(['pie/donut/radial_bar','single_radar','multi_radar','radial_area'].includes(variation))return [360,360];
+  if(variation==='parallel_coordinates')return [640,360];
+  if(['rect_heatmap','calendar_heatmap','hexbin'].includes(variation))return [400,340];
+  if(['single_boxplot','multi_boxplot','violin'].includes(variation))return [400,300];
+  if(['tree','dendrogram','radial_tree','treemap','circlepacking','sunburst','icicle'].includes(variation))return [480,360];
+  return [420,300];
+ }
+ function measure(n){if(typeof n==='string')return chartSize(n);if(n.type==='scaffold'){const [w,h]=measure(n.child);return [w*domains[n.fields[0]].length+70,h*domains[n.fields[1]].length+50];}if(n.type==='nest'){const child=measure(n.child);return [Math.max(950,child[0]*3),Math.max(740,child[1]*3)];}if(n.type==='repeat'){const [w,h]=measure(n.child),cols=n.columns,rows=Math.ceil(n.values.length/cols);return [cols*w+(cols-1)*20,rows*(h+24)+(rows-1)*20];}if(n.type==='layer')return [460,340];const sizes=n.children.map(measure),axis=n.direction==='horizontal'?0:1;return [0,1].map(i=>i===axis?sizes.reduce((s,v)=>s+v[i],0)+(sizes.length-1)*n.gap:Math.max(...sizes.map(v=>v[i])));}
  const size=measure(composition),width=Math.ceil(size[0]+48),height=Math.ceil(size[1]+48);
  check(width<=16384&&height<=16384&&width*height<=policy.maxPixels,`Composition exceeds pixel budget: ${width}x${height}; lower repetition limits or split the input`);
  const appearance={palette:pick(palettes),gradient:pick([['#eff3ff','#bdd7e7','#6baed6','#3182bd','#08519c'],['#ffffd4','#fed98e','#fe9929','#d95f0e','#993404'],['#f2f0f7','#cbc9e2','#9e9ac8','#756bb1','#54278f']]),showFieldLabels:false,fontSize:11};
