@@ -1,0 +1,38 @@
+{
+  "name": "visbricks-dataset-renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node review/server.mjs --port 5173",
+    "review": "node review/server.mjs",
+    "review:thumbnails": "node review/thumbnails.mjs",
+    "test:review": "node --test review/review.test.mjs",
+    "render": "node offline/render.mjs",
+    "compile": "node offline/compile.mjs",
+    "generate": "node offline/generate.mjs",
+    "test": "node --test offline/render.test.mjs offline/basis-expansion.test.mjs offline/nested.test.mjs offline/nested-layout.test.mjs offline/quality.test.mjs offline/variation.test.mjs offline/content-revision.test.mjs offline/parallel-geometry.test.mjs offline/position-relations.test.mjs",
+    "expand:basis": "node offline/expand-basis.mjs",
+    "generate:nested": "node offline/generate-nested.mjs",
+    "test:links": "node --test offline/list-links.test.mjs offline/link-variation.test.mjs",
+    "render:candidates": "node offline/render-candidates.mjs",
+    "test:randomized": "node --test offline/randomized-annotation.test.mjs"
+    ,"build:pages": "node offline/generate-randomized-browser-constants.mjs && vite build --config pages/vite.config.mjs"
+  },
+  "engines": {
+    "node": "^22.18.0 || >=24.12.0"
+  },
+  "dependencies": {
+    "d3": "7.9.0",
+    "d3-array": "3.2.4",
+    "d3-hexbin": "0.2.2",
+    "d3-sankey": "0.12.3",
+    "d3-scale": "4.0.2",
+    "d3-shape": "3.2.0",
+    "papaparse": "5.5.4",
+    "playwright": "1.62.1",
+    "topojson-client": "3.1.0",
+    "us-atlas": "3.0.1",
+    "vite": "8.2.0"
+  }
+}
