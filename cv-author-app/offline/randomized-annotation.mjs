@@ -144,8 +144,11 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
  }
  function repeat(field,child){
   const layout=facetLayout(domains[field].length,random);
-  // Linked groups are two unwrapped lists; ordinary facets stay compact.
-  layout.columns=doubleLinkTargets.size&&[...doubleLinkTargets].some(id=>containsNode(child,id))?domains[field].length:Math.min(layout.columns,3);
+  // Linked groups are two unwrapped lists. A vertical group-to-group layout
+  // uses horizontal lists; a horizontal group-to-group layout uses vertical
+  // lists, so the Bézier curves always cross the gap between the lists.
+  const linked=doubleLinkTargets.size&&[...doubleLinkTargets].some(id=>containsNode(child,id));
+  layout.columns=linked?(linkDirection==='vertical'?domains[field].length:1):Math.min(layout.columns,3);
   decisions.push({kind:'facet',field,...layout});
   return {type:'repeat',field,values:domains[field],...layout,child};
  }
