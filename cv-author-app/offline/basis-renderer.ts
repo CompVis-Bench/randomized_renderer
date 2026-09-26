@@ -144,9 +144,16 @@ export function renderBasis(chart:any,datasets:any[],frame:any,filters:any,appea
   const cats=horizontal?(e.y?domain('y'):[0]):(e.x?domain('x'):[0]);
   const band:any=aligned(horizontal?'y':'x',d3.scaleBand<any>().domain(cats).range(horizontal?[0,h]:[0,w]).padding(.25));
   const sums=new Map(cats.map(c=>[c,d3.sum(rows.filter((r:any)=>val(r,horizontal?'y':'x',0)===c),(r:any)=>num(r,horizontal?'x':'y',1))]));
-  const globalSums=d3.rollups(source.rows,(rr:any[])=>d3.sum(rr,r=>num(r,horizontal?'x':'y',1)),(r:any)=>JSON.stringify([...(cfg.repetitionFields??[]).map((f:string)=>r[f]),val(r,horizontal?'y':'x',0)]));
-  const vmax=stacked?Math.max(...globalSums.map(p=>p[1])):Math.max(...source.rows.map((r:any)=>num(r,horizontal?'x':'y',1)));
-  const sc:any=aligned(horizontal?'x':'y',d3.scaleLinear().domain([0,k==='normalized_stacked_bar'?1:vmax*1.1||1]).range(horizontal?[0,w]:[h,0]));
+  // Scale against the rows visible in this chart instance. Using the whole
+  // source table can miss the current stack context and let later segments
+  // extend above the plotted y range.
+  const visibleMax=Math.max(1,...sums.values());
+  const vmax=stacked?(k==='normalized_stacked_bar'?1:visibleMax):Math.max(...rows.map((r:any)=>num(r,horizontal?'x':'y',1)),1);
+  const valueAxis=horizontal?'x':'y';
+  const localScale=d3.scaleLinear().domain([0,k==='normalized_stacked_bar'?1:vmax*1.1||1]).range(horizontal?[0,w]:[h,0]);
+  // A shared value axis describes individual values, while a stacked bar
+  // needs the sum of all visible segments. Keep its value scale local.
+  const sc:any=stacked&&applies(valueAxis)?localScale:aligned(valueAxis,localScale);
   const groups=e[groupCh]?domain(groupCh):unique(rows.map(r=>r._series??0)),sub=d3.scaleBand<any>().domain(groups).range([0,band.bandwidth()]).padding(.08);
   const offset=new Map();
   rows.forEach((r:any)=>{const c=val(r,horizontal?'y':'x',0),v=num(r,horizontal?'x':'y',1)/(k==='normalized_stacked_bar'?(sums.get(c) as number)||1:1),a=stacked?(offset.get(c)??0):0;offset.set(c,a+v);
