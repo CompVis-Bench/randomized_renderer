@@ -80,6 +80,13 @@ export function linkPath(p,q,style,index=0){
  const bend=Math.min(45,len*.18)*(index%2?1:-1),ox=-dy/len*bend,oy=dx/len*bend;
  return `M${p} C${p[0]+dx/3+ox},${p[1]+dy/3+oy} ${p[0]+dx*2/3+ox},${p[1]+dy*2/3+oy} ${q}`;
 }
+// List-to-list links flow in one axis. The control points stay between the
+// two lists so the curve reads from left to right or from top to bottom.
+export function listLinkPath(p,q,orientation='horizontal',index=0){
+ const dx=q[0]-p[0],dy=q[1]-p[1],distance=orientation==='horizontal'?Math.abs(dx):Math.abs(dy),bend=(index%2?1:-1)*Math.min(18,Math.max(5,distance*.04));
+ if(orientation==='vertical')return `M${p} C${p[0]+bend},${p[1]+dy/3} ${q[0]+bend},${p[1]+dy*2/3} ${q}`;
+ return `M${p} C${p[0]+dx/3},${p[1]+bend} ${p[0]+dx*2/3},${q[1]+bend} ${q}`;
+}
 export function unitLinkEndpoints(a,b,index=0){
  const ac=[a.x+a.width/2,a.y+a.height/2],bc=[b.x+b.width/2,b.y+b.height/2];
  const dx=bc[0]-ac[0],dy=bc[1]-ac[1],v=[-.23,.19,-.09,.27][index%4];

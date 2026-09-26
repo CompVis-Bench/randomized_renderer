@@ -104,6 +104,9 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
  
  const linkOrder=charts.filter(c=>c.variation==='link').flatMap(c=>c.link_targets??[]);
  const linkRank=new Map(linkOrder.map((id,i)=>[id,i]));
+ const doubleLinkTargets=new Set(charts.filter(c=>c.variation==='link'&&c.link_targets?.length===2).flatMap(c=>c.link_targets));
+ const linkDirection=doubleLinkTargets.size?(random()<.5?'horizontal':'vertical'):undefined;
+ const containsNode=(node,id)=>typeof node==='string'?node===id:node?.node?containsNode(node.node,id):node?.child?containsNode(node.child,id):node?.children?.some(child=>containsNode(child,id));
  const nodes=charts.filter(c=>c.variation!=='link').map(c=>({node:c.chart_id,reps:[...remaining(c)],ids:[c.chart_id]}));
  nodes.sort((a,b)=>(linkRank.get(a.node)??linkOrder.length)-(linkRank.get(b.node)??linkOrder.length));
  const byId=new Map(charts.map(c=>[c.chart_id,c]));
@@ -118,14 +121,15 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
   if(items.length===1)return items[0].reps.reduceRight((n,f)=>repeat(f,n),items[0].node);
   // Factor a common enclosing field before choosing local composition.
   const common=items[0].reps.filter(f=>items.every(n=>n.reps.includes(f)));
-  if(common.length){const f=pick(common);return repeat(f,combine(items.map(n=>({...n,reps:n.reps.filter(x=>x!==f)}))));}
+  const linkedPair=items.length===2&&items.every(item=>typeof item.node==='string'&&doubleLinkTargets.has(item.node));
+  if(common.length&&!linkedPair){const f=pick(common);return repeat(f,combine(items.map(n=>({...n,reps:n.reps.filter(x=>x!==f)}))));}
   // Align compatible pairs; field IDs are never renamed to fit a layout.
   const pending=[...items],out=[];
   while(pending.length){const a=pending.shift();let paired=false;
    if(!a.reps.length&&typeof a.node==='string')for(let i=0;i<pending.length;i++){
     const b=pending[i];if(b.reps.length||typeof b.node!=='string')continue;
     const ca=byId.get(a.node),cb=byId.get(b.node),shared=['x','y'].filter(k=>ca.encodings['position.'+k]&&ca.encodings['position.'+k]===cb.encodings['position.'+k]);
-    if(!shared.length)continue;
+    if(!shared.length||linkedPair&&doubleLinkTargets.has(a.node)&&doubleLinkTargets.has(b.node))continue;
     const compatible=numericViews.has(ca.variation)&&numericViews.has(cb.variation)&&ca.variation!==cb.variation&&!([ca.variation,cb.variation].includes('plain_area')&&[ca.variation,cb.variation].some(k=>['single_line','multi_line'].includes(k)));
     const layer=shared.length===2&&compatible&&random()<policy.layerProbability;
     const axis=pick(shared),direction=axis==='x'?'vertical':'horizontal';
@@ -135,14 +139,13 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
    if(!paired)out.push({...a,node:a.reps.reduceRight((n,f)=>repeat(f,n),a.node),reps:[]});
   }
   if(out.length===1)return out[0].node;
-  const direction=random()<.5?'horizontal':'vertical';
+  const direction=linkDirection??(random()<.5?'horizontal':'vertical');
   return {type:'concat',direction,gap:28,children:out.map(n=>n.node),weights:out.map(()=>.8+random()*.4)};
  }
  function repeat(field,child){
   const layout=facetLayout(domains[field].length,random);
-  // Keep repeated charts readable on the page. Three columns gives every
-  // facet a stable cell while avoiding a single ultra-wide strip.
-  layout.columns=Math.min(layout.columns,3);
+  // Linked groups are two unwrapped lists; ordinary facets stay compact.
+  layout.columns=doubleLinkTargets.size&&[...doubleLinkTargets].some(id=>containsNode(child,id))?domains[field].length:Math.min(layout.columns,3);
   decisions.push({kind:'facet',field,...layout});
   return {type:'repeat',field,values:domains[field],...layout,child};
  }

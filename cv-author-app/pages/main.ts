@@ -99,9 +99,14 @@ function randomAnnotation(usedSeed: number) {
   if (count >= 2 && random() < .6) {
     const repeatedTargets = charts.map((chart, index) => ({ index, repeated: repetitionMaps[index].length > 0 })).filter(target => target.repeated);
     const oneGroup = repeatedTargets.length > 0 && random() < .48;
-    const targets = oneGroup
-      ? [pick(random, repeatedTargets).index]
-      : pick(random, Array.from({ length: count }, (_, left) => Array.from({ length: count - left - 1 }, (_, offset) => [left, left + offset + 1] as [number, number])).flat());
+    let targets: number[];
+    if (oneGroup) targets = [pick(random, repeatedTargets).index];
+    else {
+      const repeatedPairs = Array.from({ length: repeatedTargets.length }, (_, left) => repeatedTargets.slice(left + 1).map(right => [repeatedTargets[left].index, right.index] as [number, number])).flat();
+      targets = repeatedPairs.length ? pick(random, repeatedPairs) : pick(random, Array.from({ length: count }, (_, left) => Array.from({ length: count - left - 1 }, (_, offset) => [left, left + offset + 1] as [number, number])).flat());
+      // A two-group link is always two repeated, unwrapped lists.
+      for (const index of targets) if (!repetitionMaps[index].length) repetitionMaps[index].push(`F${nextField++}`);
+    }
     const linkEncodings: Record<string, string> = {};
     if (random() < .72) linkEncodings['stroke.color'] = `F${nextField++}`;
     if (random() < .72) linkEncodings['stroke.width'] = `F${nextField++}`;
