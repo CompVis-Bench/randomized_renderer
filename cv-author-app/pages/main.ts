@@ -97,13 +97,20 @@ function randomAnnotation(usedSeed: number) {
   }
   const resultCharts = charts.map((chart, index) => ({ chart_id: chart.chart_id, variation: chart.variation, encodings: fieldMaps[index], external_encodings: { position: repetitionMaps[index] } }));
   if (count >= 2 && random() < .6) {
-    const targets = pick(random, Array.from({ length: count }, (_, left) => Array.from({ length: count - left - 1 }, (_, offset) => [left, left + offset + 1] as [number, number])).flat());
+    const repeatedTargets = charts.map((chart, index) => ({ index, repeated: repetitionMaps[index].length > 0 })).filter(target => target.repeated);
+    const oneGroup = repeatedTargets.length > 0 && random() < .48;
+    const targets = oneGroup
+      ? [pick(random, repeatedTargets).index]
+      : pick(random, Array.from({ length: count }, (_, left) => Array.from({ length: count - left - 1 }, (_, offset) => [left, left + offset + 1] as [number, number])).flat());
+    const linkEncodings: Record<string, string> = {};
+    if (random() < .72) linkEncodings['stroke.color'] = `F${nextField++}`;
+    if (random() < .72) linkEncodings['stroke.width'] = `F${nextField++}`;
     resultCharts.push({
       chart_id: `C${count + 1}`,
       variation: 'link',
-      encodings: { 'stroke.color': `F${nextField++}`, 'stroke.width': `F${nextField++}` },
+      encodings: linkEncodings,
       external_encodings: { position: [] },
-      link_targets: [`C${targets[0] + 1}`, `C${targets[1] + 1}`],
+      link_targets: targets.map(index => `C${index + 1}`),
     } as any);
   }
   const result = { charts: resultCharts };

@@ -16,7 +16,7 @@ export function drawParallel(g:any,rows:any[],o:any){
  for(const dim of dims){
   const p=positions(String(dim))!;
   const axis=plot.append('g').attr('data-parallel-axis',String(dim)).attr('transform',horizontal?`translate(0,${p})`:`translate(${p},0)`);
-  axis.call((horizontal?d3.axisBottom(values):d3.axisLeft(values)).ticks(3)).attr('font-size',9).attr('color','#8c9aaa');
+  axis.call((horizontal?d3.axisBottom(values):d3.axisLeft(values)).ticks(3)).attr('font-size',9).attr('color','#8c9aaa').selectAll('path,line').attr('stroke-width',1.8);
   if(o.labels)axis.append('text').attr('fill','#526374').attr('x',horizontal?-8:0).attr('y',horizontal?3:-8).attr('text-anchor',horizontal?'end':'middle').text(dim);
   o.anchor?.(rows.find(r=>String(r[dimension])===String(dim)),dx+(horizontal?length/2:p),dy+(horizontal?p:length/2),horizontal?{x:dx,y:p-40,width:length,height:80}:{x:p-40,y:dy,width:80,height:length});
  }
@@ -24,7 +24,7 @@ export function drawParallel(g:any,rows:any[],o:any){
  for(const [key,group] of d3.group(rows,(r:any)=>r[recordKey])){
   const order=dims.map(String),ordered=[...group].sort((a,b)=>order.indexOf(String(a[dimension]))-order.indexOf(String(b[dimension])));
   const style=o.lineStyle??'straight',curve=style==='bezier'?(horizontal?d3.curveBumpY:d3.curveBumpX):d3.curveLinear;
-  plot.append('path').attr('data-parallel-line','true').attr('data-record',String(key)).attr('data-line-style',style).attr('d',d3.line<any>().x(r=>point(r)[0]).y(r=>point(r)[1]).curve(curve)(ordered)).attr('fill','none').attr('stroke',color(ordered[0])).attr('stroke-width',1.2).attr('opacity',o.opacity??.55);
+  plot.append('path').attr('data-parallel-line','true').attr('data-record',String(key)).attr('data-line-style',style).attr('d',d3.line<any>().x(r=>point(r)[0]).y(r=>point(r)[1]).curve(curve)(ordered)).attr('fill','none').attr('stroke',color(ordered[0])).attr('stroke-width',2.4).attr('stroke-linecap','round').attr('opacity',o.opacity??.7);
   for(const r of ordered){const p=point(r);o.point?.(r,p[0]+dx,p[1]+dy);}
  }
 }

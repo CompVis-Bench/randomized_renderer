@@ -59,16 +59,24 @@ export function renderRandomized(scene:any){
  const result=draw(scene.composition.child,{x:24,y:24,width:scene.width-48,height:scene.height-48});
  let connections='';
  for(const id of scene.composition.links){const c=charts.get(id),s=c.spec,targets=s.offlineLinkTargets,rows=rowsFor(c,{}),parts=[];
-  const endpoint=(target:string)=>{const us=units.filter(u=>u.chart===target);return us.length>1?us:anchors.filter(a=>a.chart===target).map(a=>({chart:a.chart,frame:{x:a.x-4,y:a.y-4,width:8,height:8},filters:a.filters,rows:[a.row]}));};
+  const endpoint=(target:string)=>{const as=anchors.filter(a=>a.chart===target).map(a=>({chart:a.chart,frame:{x:a.x-4,y:a.y-4,width:8,height:8},x:a.x,y:a.y,filters:a.filters,rows:[a.row]}));if(as.length>1)return as;return units.filter(u=>u.chart===target);};
   const groups=targets.map(endpoint);if(groups.some(g=>!g.length))throw new Error(`${id}: no visible link endpoints`);
+  const style=(row:any,index:number)=>{const sw=s.encodings['stroke.width']?2.4+6*fraction(s.encodings['stroke.width'].field,row[s.encodings['stroke.width'].field]):2.6;const paint=s.encodings['stroke.color']?color(s.encodings['stroke.color'].field,row[s.encodings['stroke.color'].field]):'#718096';return {sw,paint,index};};
   const pairs=new Set();let index=0;
-  for(let t=0;t<Math.max(1,groups.length-1);t++){const a=groups[0],b=groups.length===1?a:groups[t+1],count=Math.max(a.length,b.length);
-   const perm=b.map((v:any,i:number)=>({v,key:Math.imul(i+1,2654435761)^(s.offlineOptions.linkSeed??0)})).sort((x:any,y:any)=>x.key-y.key).map((p:any)=>p.v);
+  if(targets.length===1){
+   const group=groups[0];if(group.length<2)throw new Error(`${id}: one-group link needs at least two visible elements`);
+   for(let i=0;i<group.length-1;i++){
+    const u=group[i],v=group[i+1],key=JSON.stringify([u.frame,v.frame].sort((a,b)=>a.x-b.x||a.y-b.y));if(pairs.has(key))continue;pairs.add(key);
+    const row=rows[index++%Math.max(1,rows.length)]??{};const p='x' in u?[u.x,u.y]:unitLinkEndpoints(u.frame,v.frame,index)[0],q='x' in v?[v.x,v.y]:unitLinkEndpoints(u.frame,v.frame,index)[1];if(Math.hypot(p[0]-q[0],p[1]-q[1])<1)continue;const look=style(row,index);
+    parts.push(`<path data-link-chart="${esc(id)}" data-source-chart="${esc(u.chart)}" data-target-chart="${esc(v.chart)}" d="${linkPath(p,q,'bezier',index)}" stroke="${look.paint}" stroke-width="${look.sw}" stroke-linecap="round" fill="none" opacity=".82"/>`);
+   }
+  }else for(let t=0;t<groups.length-1;t++){
+   const a=groups[t],b=groups[t+1],count=Math.max(a.length,b.length),perm=b.map((v:any,i:number)=>({v,key:Math.imul(i+1,2654435761)^(s.offlineOptions.linkSeed??0)})).sort((x:any,y:any)=>x.key-y.key).map((p:any)=>p.v);
    for(let i=0;i<count;i++){const u=a[i%a.length],reps=s.external.position,compatible=perm.filter((v:any)=>v!==u&&reps.every((f:string)=>u.filters[f]===undefined||v.filters[f]===undefined||String(u.filters[f])===String(v.filters[f])));if(!compatible.length)continue;const v=compatible[i%compatible.length];
     const key=JSON.stringify([u.frame,v.frame].sort((a,b)=>a.x-b.x||a.y-b.y));if(pairs.has(key))continue;pairs.add(key);
     const contextRows=rows.filter((r:any)=>reps.every((f:string)=>u.filters[f]===undefined||String(r[f])===String(u.filters[f])));if(!contextRows.length)throw new Error(`${id}: no link rows for endpoint context`);
-    const row=contextRows[index++%contextRows.length],[p,q]=unitLinkEndpoints(u.frame,v.frame,index),sw=s.encodings['stroke.width']?1.4+6*fraction(s.encodings['stroke.width'].field,row[s.encodings['stroke.width'].field]):1.6,paint=s.encodings['stroke.color']?color(s.encodings['stroke.color'].field,row[s.encodings['stroke.color'].field]):'#718096';
-    parts.push(`<path data-link-chart="${esc(id)}" data-source-chart="${esc(u.chart)}" data-target-chart="${esc(v.chart)}" d="${linkPath(p,q,'bezier',index)}" stroke="${paint}" stroke-width="${sw}" fill="none" opacity=".7"/>`);
+    const row=contextRows[index++%contextRows.length],[p,q]=unitLinkEndpoints(u.frame,v.frame,index);if(Math.hypot(p[0]-q[0],p[1]-q[1])<1)continue;const look=style(row,index);
+    parts.push(`<path data-link-chart="${esc(id)}" data-source-chart="${esc(u.chart)}" data-target-chart="${esc(v.chart)}" d="${linkPath(p,q,'bezier',index)}" stroke="${look.paint}" stroke-width="${look.sw}" stroke-linecap="round" fill="none" opacity=".82"/>`);
    }
   }
   if(!parts.length)throw new Error(`${id}: no distinct compatible endpoints`);

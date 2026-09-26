@@ -196,7 +196,7 @@ export function renderBasis(chart:any,datasets:any[],frame:any,filters:any,appea
      .attr('data-area-min-screen-gap',d3.min(rr,r=>sy(lower(r))-sy(upper(r))));
    }
    else if(k==='horizon_chart') {const max=Math.max(...rows.map(r=>num(r,'y'))),band=max/3,b=Number(rr[0]._band??0);path(d3.area<any>().x(r=>xs(num(r,'x'))).y0(h).y1(r=>h-Math.min(band,Math.max(0,num(r,'y')-b*band))/band*h)(rr),color(rr[0])).attr('opacity',.9);}
-   else path(d3.line<any>().x(r=>xs(num(r,'x'))).y(r=>sy(num(r,'y')))(rr),'none',color(rr[0]),2);
+   else path(d3.line<any>().x(r=>xs(num(r,'x'))).y(r=>sy(num(r,'y')))(rr),'none',color(rr[0]),3);
    rr.forEach((r:any)=>point(r,xs(num(r,'x')),sy(num(r,'y'))));
   }axisX=xs;axisY=sy;
  } else if(['pie/donut/radial_bar','single_radar','multi_radar','radial_area'].includes(k) || (k==='single_line'&&e.theta)) {

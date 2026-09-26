@@ -102,7 +102,10 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
  
  const remaining=c=>c.external_encodings.position;
  
+ const linkOrder=charts.filter(c=>c.variation==='link').flatMap(c=>c.link_targets??[]);
+ const linkRank=new Map(linkOrder.map((id,i)=>[id,i]));
  const nodes=charts.filter(c=>c.variation!=='link').map(c=>({node:c.chart_id,reps:[...remaining(c)],ids:[c.chart_id]}));
+ nodes.sort((a,b)=>(linkRank.get(a.node)??linkOrder.length)-(linkRank.get(b.node)??linkOrder.length));
  const byId=new Map(charts.map(c=>[c.chart_id,c]));
  // A visible host is eligible only when its actual positional fields account
  // for the child's additional repetition fields. No anonymous replacement IDs.
@@ -182,6 +185,37 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
   }
   const all=uniq(rows.flatMap(Object.keys)),table={id:'table_'+c.chart_id,columns:all.map(name=>({name,type:rows.some(r=>typeof r[name]==='string')?'nominal':'quantitative'})),rows};datasets.push(table);
   renderCharts.push({id:c.chart_id,spec:{chartType:'OfflineBasisIdiom',datasetId:table.id,encodings:Object.fromEntries(Object.entries(e).map(([k,f])=>[k.replace('position.',''),{field:f,type:'quantitative'}])),offlineVariation:k,offlineOptions:o,offlineAnchorFields:positions(c),offlineLinkTargets:c.link_targets??[],external:structuredClone(c.external_encodings)}});
+ }
+ // A one-group link is a graph over one repeated chart. Give repeated x/y
+ // charts deterministic force-like coordinates so their marks form a graph
+ // instead of a regular grid before the links are drawn.
+ function forceCoordinates(count,seedValue){
+  const local=rng(seedValue),nodes=Array.from({length:count},()=>({x:local()*2-1,y:local()*2-1,vx:0,vy:0}));
+  for(let iteration=0;iteration<90;iteration++){
+   const forces=nodes.map(()=>({x:0,y:0}));
+   for(let i=0;i<count;i++)for(let j=i+1;j<count;j++){
+    const dx=nodes[i].x-nodes[j].x,dy=nodes[i].y-nodes[j].y,d2=dx*dx+dy*dy+.02,d=Math.sqrt(d2),push=.025/d2;
+    forces[i].x+=dx/d*push;forces[i].y+=dy/d*push;forces[j].x-=dx/d*push;forces[j].y-=dy/d*push;
+   }
+   for(let i=0;i<count;i++){
+    const j=(i+1)%count,dx=nodes[j].x-nodes[i].x,dy=nodes[j].y-nodes[i].y,d=Math.sqrt(dx*dx+dy*dy)+.001,spring=(d-.48)*.012;
+    forces[i].x+=dx/d*spring;forces[i].y+=dy/d*spring;forces[j].x-=dx/d*spring;forces[j].y-=dy/d*spring;
+    forces[i].x-=nodes[i].x*.006;forces[i].y-=nodes[i].y*.006;
+   }
+   for(let i=0;i<count;i++){nodes[i].vx=(nodes[i].vx+forces[i].x)*.88;nodes[i].vy=(nodes[i].vy+forces[i].y)*.88;nodes[i].x=Math.max(-1.1,Math.min(1.1,nodes[i].x+nodes[i].vx));nodes[i].y=Math.max(-1.1,Math.min(1.1,nodes[i].y+nodes[i].vy));}
+  }
+  return nodes.map(n=>({x:Math.round(50+n.x*42),y:Math.round(50+n.y*42)}));
+ }
+ for(const link of charts.filter(c=>c.variation==='link'&&c.link_targets?.length===1)){
+  const target=charts.find(c=>c.chart_id===link.link_targets[0]),xField=target?.encodings['position.x'],yField=target?.encodings['position.y'];
+  if(!target||!['point','contour','single_line','multi_line'].includes(target.variation)||!xField||!yField||!target.external_encodings.position.length||target.external_encodings.position.includes(xField)||target.external_encodings.position.includes(yField))continue;
+  const table=datasets.find(d=>d.id==='table_'+target.chart_id),contexts=cartesian(target.external_encodings.position);
+  for(const [contextIndex,context] of contexts.entries()){
+   const contextRows=table.rows.filter(row=>Object.entries(context).every(([field,value])=>String(row[field])===String(value)));
+   const coordinates=forceCoordinates(contextRows.length,seed+contextIndex*2654435761);
+   contextRows.forEach((row,index)=>{row[xField]=coordinates[index].x;row[yField]=coordinates[index].y;});
+  }
+  decisions.push({kind:'force-link-layout',chart:target.chart_id,link:link.chart_id});
  }
  // Instance-level whole-chart values are shared by field and repetition context.
  for(const c of charts)for(const key of ['size','color']){const f=c.external_encodings[key];if(!f)continue;const table=datasets.find(t=>t.id==='table_'+c.chart_id);const contexts=cartesian(c.external_encodings.position);contexts.forEach((ctx,i)=>{const value=ctx[f]??domains[f][i%domains[f].length];for(const row of table.rows)if(Object.entries(ctx).every(([k,v])=>row[k]===v))row[f]=value;});}
