@@ -43,7 +43,7 @@ export function renderRandomized(scene:any){
    const result=combine(results);return {...result,content:`<g data-randomized-layout="nested-scaffold">${axes}${result.content}</g>`};
   }
   if(n.type==='nest'){
-   const childWidth=Math.min(150,f.width/5),childHeight=Math.min(115,f.height/5),parentFrame={x:f.x+childWidth/2,y:f.y+childHeight/2,width:f.width-childWidth,height:f.height-childHeight};
+   const childWidth=Math.max(48,Math.min(72,f.width/8)),childHeight=Math.max(48,Math.min(64,f.height/6)),parentFrame={x:f.x+childWidth/2,y:f.y+childHeight/2,width:f.width-childWidth,height:f.height-childHeight};
    const parent=draw(n.parent,parentFrame,filters,mini),all=parent.anchors.filter((a:any)=>a.chart===n.anchor),seen=new Set();
    const selected=all.filter((a:any)=>{const key=JSON.stringify(n.fields.map((v:string)=>a.row[v]));if(seen.has(key))return false;seen.add(key);return true;});
    if(!selected.length)throw new Error('No visible nested anchors: '+n.anchor);

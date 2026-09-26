@@ -21,6 +21,9 @@ const TYPES: Record<string, Definition> = {
   violin: { channels: ['position.x', 'position.y'], required: ['position.x', 'position.y'] },
   contour: { channels: ['position.x', 'position.y', 'color'], required: ['position.x', 'position.y'] },
   parallel_coordinates: { channels: ['position.x', 'position.y', 'color'], required: ['position.x', 'position.y'] },
+  geo_point: { channels: ['position.x', 'position.y', 'color'], required: ['position.x', 'position.y'] },
+  geo_line: { channels: ['position.x', 'position.y', 'color', 'stroke.width'], required: ['position.x', 'position.y'] },
+  geo_area: { channels: ['position.x', 'position.y', 'color'], required: ['position.x', 'position.y'] },
 };
 const typeNames = Object.keys(TYPES);
 const $ = (id: string) => document.getElementById(id)!;
@@ -65,8 +68,14 @@ function randomAnnotation(usedSeed: number) {
   const sharingCount = Math.min(requestedSharing ?? integer(random, 1, Math.min(7, allPairs.length)), allPairs.length);
   const shuffledPairs = [...allPairs].sort(() => random() - .5).slice(0, sharingCount);
   for (const [left, right] of shuffledPairs) {
-    const family = (channel: string) => channel.startsWith('position.') ? 'position' : channel === 'size' ? 'quantitative' : channel === 'text' || channel === 'color' || channel === 'shape' ? 'categorical' : channel;
-    const compatible = Object.keys(fieldMaps[left]).flatMap(leftChannel => Object.keys(fieldMaps[right]).filter(rightChannel => family(leftChannel) === family(rightChannel)).map(rightChannel => [leftChannel, rightChannel] as [string, string]));
+    const family = (chartIndex: number, channel: string) => {
+      if (charts[chartIndex].variation.startsWith('geo_') && ['position.x', 'position.y'].includes(channel)) return 'geo-position';
+      if (channel === 'position.theta') return 'angular';
+      if (channel === 'position.radius' || channel === 'size') return 'quantitative';
+      if (channel.startsWith('position.')) return 'position';
+      return channel === 'text' || channel === 'color' || channel === 'shape' || channel === 'stroke.color' ? 'categorical' : channel;
+    };
+    const compatible = Object.keys(fieldMaps[left]).flatMap(leftChannel => Object.keys(fieldMaps[right]).filter(rightChannel => family(left, leftChannel) === family(right, rightChannel)).map(rightChannel => [leftChannel, rightChannel] as [string, string]));
     if (compatible.length) {
       const [leftChannel, rightChannel] = pick(random, compatible);
       fieldMaps[right][rightChannel] = fieldMaps[left][leftChannel];
@@ -74,7 +83,30 @@ function randomAnnotation(usedSeed: number) {
       repetitionMaps[right][integer(random, 0, repetitionMaps[right].length - 1)] = pick(random, repetitionMaps[left]);
     }
   }
-  const result = { charts: charts.map((chart, index) => ({ chart_id: chart.chart_id, variation: chart.variation, encodings: fieldMaps[index], external_encodings: { position: repetitionMaps[index] } })) };
+  // When two repetition slots line up with a host's two positional fields,
+  // keep that relationship explicit so the renderer can draw a nested view.
+  const positionFields = (index: number) => ['position.x', 'position.y'].map(channel => fieldMaps[index][channel]).filter(Boolean);
+  const nestedPairs = charts.flatMap((child, childIndex) => charts.flatMap((host, hostIndex) => {
+    if (childIndex === hostIndex || child.repetitionCount < 2 || repetitionMaps[hostIndex].length || !['point', 'single_line', 'bar', 'rect_heatmap'].includes(host.variation)) return [];
+    const hostPositions = positionFields(hostIndex);
+    return hostPositions.length >= 2 ? [{ childIndex, hostIndex, hostPositions }] : [];
+  }));
+  if (nestedPairs.length && random() < .78) {
+    const nested = pick(random, nestedPairs);
+    repetitionMaps[nested.childIndex] = [...nested.hostPositions];
+  }
+  const resultCharts = charts.map((chart, index) => ({ chart_id: chart.chart_id, variation: chart.variation, encodings: fieldMaps[index], external_encodings: { position: repetitionMaps[index] } }));
+  if (count >= 2 && random() < .6) {
+    const targets = pick(random, Array.from({ length: count }, (_, left) => Array.from({ length: count - left - 1 }, (_, offset) => [left, left + offset + 1] as [number, number])).flat());
+    resultCharts.push({
+      chart_id: `C${count + 1}`,
+      variation: 'link',
+      encodings: { 'stroke.color': `F${nextField++}`, 'stroke.width': `F${nextField++}` },
+      external_encodings: { position: [] },
+      link_targets: [`C${targets[0] + 1}`, `C${targets[1] + 1}`],
+    } as any);
+  }
+  const result = { charts: resultCharts };
   validateAnnotation(result);
   return { result, sharingCount };
 }
@@ -90,7 +122,7 @@ function download(name: string, type: string, text: string) { const link = docum
 show({ charts: [{ chart_id: 'C1', variation: 'point', encodings: { 'position.x': 'F1', 'position.y': 'F2', color: 'F3' }, external_encodings: { position: [] } }] });
 $('mg-count').addEventListener('input', () => { $('mg-count-value').textContent = ($('mg-count') as HTMLInputElement).value; });
 $('sharing-count').addEventListener('input', () => { $('sharing-count-value').textContent = ($('sharing-count') as HTMLInputElement).value; });
-$('generate-annotation').onclick = () => { try { const usedSeed = seedValue(); const { result, sharingCount } = randomAnnotation(usedSeed); show(result); $('status').textContent = `Schema-valid annotation · ${result.charts.length} MGs · ${sharingCount} shared fields · seed ${usedSeed}`; } catch (error) { $('status').textContent = `Error: ${String(error).replace(/^Error: /, '')}`; } };
+$('generate-annotation').onclick = () => { try { const usedSeed = seedValue(); const { result, sharingCount } = randomAnnotation(usedSeed); show(result); const mgCount = result.charts.filter(chart => chart.variation !== 'link').length; const linkCount = result.charts.filter(chart => chart.variation === 'link').length; $('status').textContent = `Schema-valid annotation · ${mgCount} MGs · ${sharingCount} shared fields${linkCount ? ' · 1 link' : ''} · seed ${usedSeed}`; } catch (error) { $('status').textContent = `Error: ${String(error).replace(/^Error: /, '')}`; } };
 $('render').onclick = () => { try { render(); } catch (error) { $('status').textContent = `Error: ${String(error).replace(/^Error: /, '')}`; } };
 $('format').onclick = () => { try { show(JSON.parse(annotation.value)); } catch (error) { $('status').textContent = `JSON error: ${String(error)}`; } };
 $('download-json').onclick = () => download('annotation.json', 'application/json', annotation.value);
