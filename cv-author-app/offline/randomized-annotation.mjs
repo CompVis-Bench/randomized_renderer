@@ -137,9 +137,9 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
  }
  function repeat(field,child){
   const layout=facetLayout(domains[field].length,random);
-  // Keep repeated charts readable on the page. Four columns gives every
+  // Keep repeated charts readable on the page. Three columns gives every
   // facet a stable cell while avoiding a single ultra-wide strip.
-  layout.columns=Math.min(layout.columns,4);
+  layout.columns=Math.min(layout.columns,3);
   decisions.push({kind:'facet',field,...layout});
   return {type:'repeat',field,values:domains[field],...layout,child};
  }
