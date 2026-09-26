@@ -45,21 +45,22 @@ function parseOptionalInteger(id: string, min: number, max: number, label: strin
 }
 function randomAnnotation(usedSeed: number) {
   const random = rng(usedSeed);
-  const count = parseOptionalInteger('mg-count', 1, 5, 'MG count') ?? integer(random, 1, 5);
-  const requestedSharing = parseOptionalInteger('sharing-count', 0, 10, 'Field sharing count');
+  const count = parseOptionalInteger('mg-count', 1, 7, 'MG count') ?? integer(random, 1, 7);
+  const requestedSharing = parseOptionalInteger('sharing-count', 1, 7, 'Field sharing count');
   const charts = Array.from({ length: count }, (_, index) => {
     const variation = pick(random, typeNames);
     const definition = TYPES[variation];
     const optional = definition.channels.filter(channel => !definition.required.includes(channel));
     const channels = [...definition.required, ...optional.filter(() => random() < .45)];
-    const repetitionCount = random() < .42 ? integer(random, 1, 2) : 0;
+    const maxRepetition = count >= 6 ? 1 : 2;
+    const repetitionCount = random() < (count >= 6 ? .3 : .42) ? integer(random, 1, maxRepetition) : 0;
     return { chart_id: `C${index + 1}`, variation, channels, repetitionCount };
   });
   let nextField = 1;
   const fieldMaps = charts.map(chart => Object.fromEntries(chart.channels.map(channel => [channel, `F${nextField++}`])));
   const repetitionMaps = charts.map(chart => Array.from({ length: chart.repetitionCount }, () => `F${nextField++}`));
   const allPairs = Array.from({ length: count }, (_, left) => Array.from({ length: count - left - 1 }, (_, offset) => [left, left + offset + 1] as [number, number])).flat();
-  const sharingCount = Math.min(requestedSharing ?? integer(random, 0, Math.min(5, allPairs.length)), allPairs.length);
+  const sharingCount = Math.min(requestedSharing ?? integer(random, 1, Math.min(7, allPairs.length)), allPairs.length);
   const shuffledPairs = [...allPairs].sort(() => random() - .5).slice(0, sharingCount);
   for (const [left, right] of shuffledPairs) {
     const family = (channel: string) => channel.startsWith('position.') ? 'position' : channel === 'size' ? 'quantitative' : channel === 'text' || channel === 'color' || channel === 'shape' ? 'categorical' : channel;
@@ -85,6 +86,8 @@ function render() {
 }
 function download(name: string, type: string, text: string) { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([text], { type })); link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
 show({ charts: [{ chart_id: 'C1', variation: 'point', encodings: { 'position.x': 'F1', 'position.y': 'F2', color: 'F3' }, external_encodings: { position: [] } }] });
+$('mg-count').addEventListener('input', () => { $('mg-count-value').textContent = ($('mg-count') as HTMLInputElement).value; });
+$('sharing-count').addEventListener('input', () => { $('sharing-count-value').textContent = ($('sharing-count') as HTMLInputElement).value; });
 $('generate-annotation').onclick = () => { try { const usedSeed = seedValue(); const { result, sharingCount } = randomAnnotation(usedSeed); show(result); $('status').textContent = `Schema-valid annotation · ${result.charts.length} MGs · ${sharingCount} shared fields · seed ${usedSeed}`; } catch (error) { $('status').textContent = `Error: ${String(error).replace(/^Error: /, '')}`; } };
 $('render').onclick = () => { try { render(); } catch (error) { $('status').textContent = `Error: ${String(error).replace(/^Error: /, '')}`; } };
 $('format').onclick = () => { try { show(JSON.parse(annotation.value)); } catch (error) { $('status').textContent = `JSON error: ${String(error)}`; } };
