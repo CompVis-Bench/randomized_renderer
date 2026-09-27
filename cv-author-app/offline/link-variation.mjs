@@ -16,6 +16,7 @@ function pairs(a,b,same,seed,candidates=false){
 }
 export function varyLinks(job,chooseStyle){
  const {annotation:a,plan:p}=job,links=a.charts.filter(c=>c.variation==='link');if(!links.length)return [];
+ if(a.charts.some(c=>c.repetition_position?.length>1))throw new Error(`${a.sample_id}: links cannot be combined with two-dimensional repetition`);
  const cfgs=new Map(p.charts.map(c=>[c.id,c])),tables=new Map(p.datasets.map(d=>[d.id,d]));
  const seed=linkSeed(a.sample_id),changes=[];
  if(links.every(c=>cfgs.get(c.chart_id).basis)){

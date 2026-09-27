@@ -19,12 +19,14 @@ export function validateAnnotation(a) {
  check(a && Object.keys(a).join(',')==='charts' && Array.isArray(a.charts) && a.charts.length>0 && a.charts.length<=64,'Expected v5 {charts:[...]} with 1–64 templates');
  const ids=new Set(a.charts.map(c=>c.chart_id));check(ids.size===a.charts.length,'Duplicate chart IDs');
  const links=new Set(a.charts.filter(c=>c.variation==='link').map(c=>c.chart_id));
+ const hasLink=links.size>0;
  for(const c of a.charts){
   const keys=['chart_id','variation','encodings','external_encodings',...(c.variation==='link'?['link_targets']:[])];
   check(equalSet(Object.keys(c),keys)&&/^C[1-9]\d*$/.test(c.chart_id),`Invalid chart properties: ${c.chart_id}`);
   check(annotationChannels[c.variation],`Unknown variation: ${c.variation}`);
   check(c.encodings && !Array.isArray(c.encodings) && Object.keys(c.encodings).every(k=>annotationChannels[c.variation].includes(k)),`Invalid native channel: ${c.chart_id} (${Object.keys(c.encodings??{}).filter(k=>!annotationChannels[c.variation].includes(k)).join(', ')})`);
   const ext=c.external_encodings;check(ext && Object.keys(ext).every(k=>['position','size','color'].includes(k)) && Array.isArray(ext.position) && uniq(ext.position).length===ext.position.length,`Invalid external encodings: ${c.chart_id}`);
+  if(hasLink)check(ext.position.length<=1,`${c.chart_id}: links cannot be combined with two-dimensional repetition`);
   check(['size','color'].every(k=>!(k in ext)||typeof ext[k]==='string'&&/^F[1-9]\d*$/.test(ext[k])),`Invalid whole-instance field: ${c.chart_id}`);
   check(fields(c).every(f=>typeof f==='string'&&/^F[1-9]\d*$/.test(f)),`Invalid field ID: ${c.chart_id}`);
   if(c.variation==='link')check(Array.isArray(c.link_targets)&&uniq(c.link_targets).length===c.link_targets.length&&c.link_targets.every(id=>ids.has(id)&&!links.has(id)),`Invalid link targets: ${c.chart_id}`);
@@ -249,6 +251,11 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
 }
 
 export function validateRandomizedScene(annotation,scene){
+ const hasLink=annotation.charts.some(c=>c.variation==='link');
+ if(hasLink){
+  check(annotation.charts.every(c=>c.external_encodings.position.length<=1),'Links cannot be combined with two-dimensional repetition');
+  check(!JSON.stringify(scene.composition).includes('"type":"scaffold"'),'Links cannot be rendered with two-dimensional repetition scaffolds');
+ }
  const expected=new Map(annotation.charts.filter(c=>c.variation!=='link').map(c=>[c.chart_id,c.external_encodings.position]));
  const seen=new Set();
  function visit(n,inherited=[]){

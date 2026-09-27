@@ -29,6 +29,11 @@ export function compileTarget(annotation, plan) {
   assert(plan.version === 1 && Array.isArray(plan.datasets) && Array.isArray(plan.charts), 'Plan requires version: 1, datasets, charts');
   validatePositionAlignments(annotation,plan);
   const chartIds = new Set();
+  const hasLink = annotation.charts.some((target) => target.variation === 'link');
+  if (hasLink) for (const target of annotation.charts) {
+    assert(Array.isArray(target.repetition_position) && target.repetition_position.length <= 1,
+      `${target.chart_id}: links cannot be combined with two-dimensional repetition`);
+  }
   const columnTypes = new Map();
   for (const dataset of plan.datasets) {
     for (const column of dataset.columns ?? []) {
