@@ -18,13 +18,16 @@ export function renderRandomized(scene:any){
   if(!rows.length)throw new Error(`${id}: no data in repeated context`);
   const [preferredWidth,preferredHeight]=preferredChartSize(s.offlineVariation);
   const scale=Math.min(1,frame.width/preferredWidth,frame.height/preferredHeight);
-  let f={x:frame.x+(frame.width-preferredWidth*scale)/2,y:frame.y+(frame.height-preferredHeight*scale)/2,width:preferredWidth*scale,height:preferredHeight*scale};
+  const fitGeography=s.offlineVariation.startsWith('geo_');
+  // Geographic projections fit the available cell and preserve their own
+  // aspect ratio; a second intrinsic-size cap only adds unnecessary whitespace.
+  let f=fitGeography?{...frame}:{x:frame.x+(frame.width-preferredWidth*scale)/2,y:frame.y+(frame.height-preferredHeight*scale)/2,width:preferredWidth*scale,height:preferredHeight*scale};
   let appearance={...scene.appearance};
   if(ext.size)f=markFrame(f,Math.sqrt(.42+.58*fraction(ext.size,rows[0][ext.size])));
   if(ext.color){const paint=color(ext.color,rows[0][ext.color]);appearance={...appearance,palette:Array(6).fill(paint),gradient:Array(5).fill(paint)};}
   const sharedPositions:any={};
   for(const axis of ['x','y'])if(s.encodings[axis]){const field=s.encodings[axis].field,d=scaleDomains[field];if(d.every((v:any)=>Number.isFinite(Number(v))))sharedPositions[axis]={axis,field,kind:'number',domain:[Math.min(0,...d.map(Number)),Math.max(...d.map(Number))*1.1||1]};}
-  const out=renderBasis(c,datasets,f,filters,appearance,{axes:!mini,sharedPositions});
+  const out=renderBasis(c,datasets,f,filters,appearance,{axes:!mini,sharedPositions,fitGeography});
   units.push(...out.units);anchors.push(...out.anchors);
   return {content:`<g data-randomized-instance="${esc(id)}" data-context="${esc(JSON.stringify(filters))}" data-instance-frame="${esc(JSON.stringify(f))}">${out.content}</g>`,anchors:out.anchors};
  }

@@ -23,7 +23,8 @@ export function renderBasis(chart:any,datasets:any[],frame:any,filters:any,appea
  if(frame.width<48||frame.height<44) throw new Error(`${chart.id}: basis cell too small ${frame.width}x${frame.height}`);
  const showLabels=appearance.showFieldLabels!==false;
  const small=!options.sharedPosition && (options.axes===false || frame.width<160 || frame.height<140);
- const W=frame.width,H=frame.height,L=small?8:46,T=small?7:32,R=small?8:18,B=small?8:38,w=W-L-R,h=H-T-B;
+ const fitGeography=k.startsWith('geo_')&&options.fitGeography;
+ const W=frame.width,H=frame.height,L=fitGeography?8:small?8:46,T=fitGeography?8:small?7:32,R=fitGeography?8:small?8:18,B=fitGeography?8:small?8:38,w=W-L-R,h=H-T-B;
  const root=d3.create('svg:svg'); const plot=root.append('g').attr('transform',`translate(${L},${T})`);
  if(k==='stacked_area')plot.attr('data-stacked-area-frame',JSON.stringify([w,h]));
  const palette=appearance.palette; const anchors:any[]=[];
