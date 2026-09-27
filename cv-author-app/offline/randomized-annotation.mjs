@@ -17,6 +17,14 @@ export const defaultPolicy = Object.freeze({layerProbability:.5,nestedProbabilit
 // Paired link groups need a visible connection corridor. Keep it large enough
 // for the curves and small enough that the groups still read as one layout.
 export const linkGroupGap = 96;
+export function preferredChartSize(variation){
+ if(['pie/donut/radial_bar','single_radar','multi_radar','radial_area'].includes(variation))return [360,360];
+ if(variation==='parallel_coordinates')return [640,360];
+ if(['rect_heatmap','calendar_heatmap','hexbin'].includes(variation))return [400,340];
+ if(['single_boxplot','multi_boxplot','violin'].includes(variation))return [400,300];
+ if(['tree','dendrogram','radial_tree','treemap','circlepacking','sunburst','icicle'].includes(variation))return [480,360];
+ return [420,300];
+}
 
 export function validateAnnotation(a) {
  check(a && Object.keys(a).join(',')==='charts' && Array.isArray(a.charts) && a.charts.length>0 && a.charts.length<=64,'Expected v5 {charts:[...]} with 1–64 templates');
@@ -237,12 +245,7 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
  const plan={charts:renderCharts.map(c=>({id:c.id,datasetId:c.spec.datasetId,basis:c.spec.offlineOptions})),datasets};enrichVenn({annotation:legacy,plan});
  function chartSize(id){
   const variation=byId.get(id)?.variation;
-  if(['pie/donut/radial_bar','single_radar','multi_radar','radial_area'].includes(variation))return [360,360];
-  if(variation==='parallel_coordinates')return [640,360];
-  if(['rect_heatmap','calendar_heatmap','hexbin'].includes(variation))return [400,340];
-  if(['single_boxplot','multi_boxplot','violin'].includes(variation))return [400,300];
-  if(['tree','dendrogram','radial_tree','treemap','circlepacking','sunburst','icicle'].includes(variation))return [480,360];
-  return [420,300];
+  return preferredChartSize(variation);
  }
  function measure(n){if(typeof n==='string')return chartSize(n);if(n.type==='scaffold'){const [w,h]=measure(n.child);return [w*domains[n.fields[0]].length+70,h*domains[n.fields[1]].length+50];}if(n.type==='nest'){const child=measure(n.child);return [Math.max(950,child[0]*3),Math.max(740,child[1]*3)];}if(n.type==='repeat'){const [w,h]=measure(n.child),cols=n.columns,rows=Math.ceil(n.values.length/cols);return [cols*w+(cols-1)*20,rows*(h+24)+(rows-1)*20];}if(n.type==='layer')return [460,340];const sizes=n.children.map(measure),axis=n.direction==='horizontal'?0:1;return [0,1].map(i=>i===axis?sizes.reduce((s,v)=>s+v[i],0)+(sizes.length-1)*n.gap:Math.max(...sizes.map(v=>v[i])));}
  const size=measure(composition),width=Math.ceil(size[0]+48),height=Math.ceil(size[1]+48);

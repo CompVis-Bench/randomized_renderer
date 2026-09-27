@@ -3,6 +3,7 @@ import * as d3 from 'd3';
 import {renderBasis} from './basis-renderer';
 import {facetIndex} from './quality-rules.mjs';
 import {linkPath,listLinkPath,listLinkEndpoints,unitLinkEndpoints} from './link-variation.mjs';
+import {preferredChartSize} from './randomized-annotation.mjs';
 const esc=(x:any)=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]!));
 export function renderRandomized(scene:any){
  const charts=new Map<string,any>(scene.charts.map((c:any)=>[c.id,c])),domains=scene.composition.domains,scaleDomains=scene.composition.scaleDomains??domains;
@@ -15,7 +16,10 @@ export function renderRandomized(scene:any){
  function leaf(id:string,frame:any,filters:any,mini=false){
   const c=charts.get(id),s=c.spec,rows=rowsFor(c,filters),ext=s.external;
   if(!rows.length)throw new Error(`${id}: no data in repeated context`);
-  let f=frame,appearance={...scene.appearance};
+  const [preferredWidth,preferredHeight]=preferredChartSize(s.offlineVariation);
+  const scale=Math.min(1,frame.width/preferredWidth,frame.height/preferredHeight);
+  let f={x:frame.x+(frame.width-preferredWidth*scale)/2,y:frame.y+(frame.height-preferredHeight*scale)/2,width:preferredWidth*scale,height:preferredHeight*scale};
+  let appearance={...scene.appearance};
   if(ext.size)f=markFrame(f,Math.sqrt(.42+.58*fraction(ext.size,rows[0][ext.size])));
   if(ext.color){const paint=color(ext.color,rows[0][ext.color]);appearance={...appearance,palette:Array(6).fill(paint),gradient:Array(5).fill(paint)};}
   const sharedPositions:any={};
