@@ -38,16 +38,12 @@ const statesGeometry: any = {
   type: 'FeatureCollection',
   features: statesFeatureCollection.features.filter((state: any) => Number(state.id) <= 56),
 };
-// Keep the local fixture for small city maps, and add US-wide and per-state
-// GeoJSON choices so repeated generations are not locked to one location.
+// Keep the local fixture for small city maps, and add a US-wide state
+// collection. Map charts need a collection of regions so area and point marks
+// do not collapse to a single feature.
 const geometryVariants: any[] = [
   { id: 'manhattan', geometry: localGeometry, projection: 'mercator' },
   { id: 'united-states', geometry: statesGeometry, projection: 'albersUsa' },
-  ...statesGeometry.features.map((state: any, index: number) => ({
-    id: `us-state-${state.id ?? index}`,
-    geometry: { type: 'FeatureCollection', features: [state] },
-    projection: 'albersUsa',
-  })),
 ];
 const preview = $('preview');
 let currentSvg = '';
@@ -148,7 +144,8 @@ function render() {
     const result = buildRandomizedAnnotation(value, { seed: randomSeed(), geometries: geometryVariants });
     return window.offlineRenderer.render(result.scene);
   });
-  currentSvg = svgs[0]; preview.innerHTML = svgs.join('');
+  currentSvg = svgs[0];
+  preview.innerHTML = svgs.map((svg, index) => `<div class="preview-card"><span class="detail-label">Presentation detail ${index + 1}</span>${svg}</div>`).join('');
   preview.querySelectorAll('svg').forEach(node => node.setAttribute('preserveAspectRatio', 'xMidYMid meet'));
   $('status').textContent = 'Rendered · 4 randomized SVG previews';
 }

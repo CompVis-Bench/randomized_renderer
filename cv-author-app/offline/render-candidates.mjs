@@ -30,7 +30,7 @@ export async function main(args=process.argv.slice(2)){
   const statesTopo=JSON.parse(await readFile(new URL('../node_modules/us-atlas/states-10m.json',import.meta.url),'utf8'));
   const stateFeatures=feature(statesTopo,statesTopo.objects.states).features.filter(state=>Number(state.id)<=56);
   const states={type:'FeatureCollection',features:stateFeatures};
-  geometries=[{geometry:localGeometry,projection:'mercator'},{geometry:states,projection:'albersUsa'},...states.features.map(state=>({geometry:{type:'FeatureCollection',features:[state]},projection:'albersUsa'}))];
+  geometries=[{geometry:localGeometry,projection:'mercator'},{geometry:states,projection:'albersUsa'}];
  }
  const jobs=[];
  // Preflight all annotations before creating candidate files or launching Chromium.
