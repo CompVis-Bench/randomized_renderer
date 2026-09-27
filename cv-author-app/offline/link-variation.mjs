@@ -82,10 +82,20 @@ export function linkPath(p,q,style,index=0){
 }
 // List-to-list links flow in one axis. The control points stay between the
 // two lists so the curve reads from left to right or from top to bottom.
-export function listLinkPath(p,q,orientation='horizontal',index=0){
- const dx=q[0]-p[0],dy=q[1]-p[1],distance=orientation==='horizontal'?Math.abs(dx):Math.abs(dy),bend=(index%2?1:-1)*Math.min(18,Math.max(5,distance*.04));
- if(orientation==='vertical')return `M${p} C${p[0]+bend},${p[1]+dy/3} ${q[0]+bend},${p[1]+dy*2/3} ${q}`;
- return `M${p} C${p[0]+dx/3},${p[1]+bend} ${p[0]+dx*2/3},${q[1]+bend} ${q}`;
+export function listLinkPath(p,q,orientation='horizontal'){
+ if(orientation==='vertical'){const y=(p[1]+q[1])/2;return `M${p} C${p[0]},${y} ${q[0]},${y} ${q}`;}
+ const x=(p[0]+q[0])/2;return `M${p} C${x},${p[1]} ${x},${q[1]} ${q}`;
+}
+// Orientation belongs to the whole pair of lists, even when a shuffled match
+// is farther away along the list than across the gap. Ports touch the frame.
+export function listLinkEndpoints(a,b,orientation='horizontal',index=0){
+ const horizontal=orientation==='horizontal',axis=horizontal?'x':'y',size=horizontal?'width':'height';
+ const cross=horizontal?'y':'x',crossSize=horizontal?'height':'width';
+ const sign=Math.sign(b[axis]+b[size]/2-a[axis]-a[size]/2)||1,delta=(index%3-1)*.055;
+ let u=a[cross]+a[crossSize]*(.5+delta),v=b[cross]+b[crossSize]*(.5-delta);
+ if(Math.abs(u-v)<4){u-=a[crossSize]*.08;v+=b[crossSize]*.08;}
+ const start=a[axis]+(sign>0?a[size]:0),end=b[axis]+(sign>0?0:b[size]);
+ return horizontal?[[start,u],[end,v]]:[[u,start],[v,end]];
 }
 export function unitLinkEndpoints(a,b,index=0){
  const ac=[a.x+a.width/2,a.y+a.height/2],bc=[b.x+b.width/2,b.y+b.height/2];

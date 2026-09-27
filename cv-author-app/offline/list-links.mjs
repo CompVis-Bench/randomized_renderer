@@ -42,7 +42,7 @@ export function listPorts(a,b,orientation,index){
  const delta=(index%3-1)*.055;
  let p,q;
  if(orientation==='left-right'){p=[a.x+a.width,a.y+a.height*(.5+delta)];q=[b.x,b.y+b.height*(.5-delta)];if(Math.abs(p[1]-q[1])<4){p[1]-=a.height*.08;q[1]+=b.height*.08;}}
- else{p=[a.x+a.width*(.5+delta),a.y+a.height];q=[b.x+b.width*(.5-delta),b.y-24];if(Math.abs(p[0]-q[0])<4){p[0]-=a.width*.08;q[0]+=b.width*.08;}}
+ else{p=[a.x+a.width*(.5+delta),a.y+a.height];q=[b.x+b.width*(.5-delta),b.y];if(Math.abs(p[0]-q[0])<4){p[0]-=a.width*.08;q[0]+=b.width*.08;}}
  return [p,q];
 }
 export function listStroke(value,domain){return 1.4+6*(Number(value)-domain[0])/(domain[1]-domain[0]);}

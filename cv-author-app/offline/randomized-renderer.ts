@@ -2,7 +2,7 @@
 import * as d3 from 'd3';
 import {renderBasis} from './basis-renderer';
 import {facetIndex} from './quality-rules.mjs';
-import {linkPath,listLinkPath,unitLinkEndpoints} from './link-variation.mjs';
+import {linkPath,listLinkPath,listLinkEndpoints,unitLinkEndpoints} from './link-variation.mjs';
 const esc=(x:any)=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]!));
 export function renderRandomized(scene:any){
  const charts=new Map<string,any>(scene.charts.map((c:any)=>[c.id,c])),domains=scene.composition.domains,scaleDomains=scene.composition.scaleDomains??domains;
@@ -57,11 +57,20 @@ export function renderRandomized(scene:any){
   throw new Error('Unknown randomized layout: '+n.type);
  }
  const result=draw(scene.composition.child,{x:24,y:24,width:scene.width-48,height:scene.height-48});
+ // The concat separating the target groups defines the link axis. Individual
+ // matches and differently sized charts must not override that layout choice.
+ const contains=(n:any,id:string):boolean=>typeof n==='string'?n===id:[n.child,n.parent,...n.children??[]].filter(Boolean).some(child=>contains(child,id));
+ function connectionDirection(n:any,a:string,b:string):string|undefined{
+  if(typeof n==='string')return undefined;
+  const children=[n.child,n.parent,...n.children??[]].filter(Boolean);
+  const common=children.find(child=>contains(child,a)&&contains(child,b));
+  if(common)return connectionDirection(common,a,b);
+  if(n.type==='concat'&&children.some(child=>contains(child,a))&&children.some(child=>contains(child,b)))return n.direction;
+ }
  let connections='';
  for(const id of scene.composition.links){const c=charts.get(id),s=c.spec,targets=s.offlineLinkTargets,rows=rowsFor(c,{}),parts=[];
   const endpoint=(target:string,list=false)=>{const us=units.filter(u=>u.chart===target);if(list&&us.length>1)return us;const as=anchors.filter(a=>a.chart===target).map(a=>({chart:a.chart,frame:{x:a.x-4,y:a.y-4,width:8,height:8},x:a.x,y:a.y,filters:a.filters,rows:[a.row]}));if(as.length>1)return as;return us.length?us:as;};
   const groups=targets.map(target=>endpoint(target,targets.length===2));if(groups.some(g=>!g.length))throw new Error(`${id}: no visible link endpoints`);
-  const listOrientation=targets.length===2?(()=>{const center=(group:any[])=>group.reduce((p,u)=>[p[0]+u.frame.x+u.frame.width/2,p[1]+u.frame.y+u.frame.height/2],[0,0]).map(v=>v/group.length);const a=center(groups[0]),b=center(groups[1]);return Math.abs(b[0]-a[0])>=Math.abs(b[1]-a[1])?'horizontal':'vertical';})():'horizontal';
   const style=(row:any,index:number)=>{const sw=s.encodings['stroke.width']?2.4+6*fraction(s.encodings['stroke.width'].field,row[s.encodings['stroke.width'].field]):2.6;const paint=s.encodings['stroke.color']?color(s.encodings['stroke.color'].field,row[s.encodings['stroke.color'].field]):'#718096';return {sw,paint,index};};
   const pairs=new Set();let index=0;
   if(targets.length===1){
@@ -73,11 +82,13 @@ export function renderRandomized(scene:any){
    }
   }else for(let t=0;t<groups.length-1;t++){
    const a=groups[t],b=groups[t+1],count=Math.max(a.length,b.length),perm=b.map((v:any,i:number)=>({v,key:Math.imul(i+1,2654435761)^(s.offlineOptions.linkSeed??0)})).sort((x:any,y:any)=>x.key-y.key).map((p:any)=>p.v);
+   const center=(group:any[])=>group.reduce((p,u)=>[p[0]+u.frame.x+u.frame.width/2,p[1]+u.frame.y+u.frame.height/2],[0,0]).map(v=>v/group.length);
+   const ac=center(a),bc=center(b),listOrientation=connectionDirection(scene.composition.child,targets[t],targets[t+1])??(Math.abs(bc[0]-ac[0])>=Math.abs(bc[1]-ac[1])?'horizontal':'vertical');
    for(let i=0;i<count;i++){const u=a[i%a.length],reps=s.external.position,compatible=perm.filter((v:any)=>v!==u&&reps.every((f:string)=>u.filters[f]===undefined||v.filters[f]===undefined||String(u.filters[f])===String(v.filters[f])));if(!compatible.length)continue;const v=compatible[i%compatible.length];
     const key=JSON.stringify([u.frame,v.frame].sort((a,b)=>a.x-b.x||a.y-b.y));if(pairs.has(key))continue;pairs.add(key);
     const contextRows=rows.filter((r:any)=>reps.every((f:string)=>u.filters[f]===undefined||String(r[f])===String(u.filters[f])));if(!contextRows.length)throw new Error(`${id}: no link rows for endpoint context`);
-    const row=contextRows[index++%contextRows.length],[p,q]=unitLinkEndpoints(u.frame,v.frame,index);if(Math.hypot(p[0]-q[0],p[1]-q[1])<1)continue;const look=style(row,index);
-    parts.push(`<path data-link-chart="${esc(id)}" data-source-chart="${esc(u.chart)}" data-target-chart="${esc(v.chart)}" d="${listLinkPath(p,q,listOrientation,index)}" stroke="${look.paint}" stroke-width="${look.sw}" stroke-linecap="round" fill="none" opacity=".82"/>`);
+    const row=contextRows[index++%contextRows.length],[p,q]=listLinkEndpoints(u.frame,v.frame,listOrientation,index);if(Math.hypot(p[0]-q[0],p[1]-q[1])<1)continue;const look=style(row,index);
+    parts.push(`<path data-link-chart="${esc(id)}" data-source-chart="${esc(u.chart)}" data-target-chart="${esc(v.chart)}" data-list-orientation="${listOrientation}" data-source-frame="${esc(JSON.stringify(u.frame))}" data-target-frame="${esc(JSON.stringify(v.frame))}" d="${listLinkPath(p,q,listOrientation)}" stroke="${look.paint}" stroke-width="${look.sw}" stroke-linecap="round" fill="none" opacity=".82"/>`);
    }
   }
   if(!parts.length)throw new Error(`${id}: no distinct compatible endpoints`);
