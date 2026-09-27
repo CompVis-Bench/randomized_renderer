@@ -34,7 +34,8 @@ export function renderBasis(chart:any,datasets:any[],frame:any,filters:any,appea
  const col=e.color?'color':e['stroke.color']?'stroke.color':null;
  const categorical=cfg.categoricalFields??[];
  const cd=col?domain(col):[0];
- const cm=col&&!categorical.includes(e[col].field)?d3.scaleLinear<string>().domain(d3.extent(cd.map(Number)) as [number,number]).range([appearance.gradient[1],appearance.gradient.at(-1)]):d3.scaleOrdinal<any,string>().domain(cd).range(palette);
+ const geoPalette=['#2563eb','#dc2626','#16a34a','#d97706','#7c3aed','#0891b2','#db2777','#65a30d','#ea580c','#334155'];
+ const cm=col&&!categorical.includes(e[col].field)?d3.scaleLinear<string>().domain(d3.extent(cd.map(Number)) as [number,number]).range([appearance.gradient[1],appearance.gradient.at(-1)]):d3.scaleOrdinal<any,string>().domain(cd).range(k==='geo_area'?geoPalette:palette);
  const color=(r:any)=>['tree','dendrogram','radial_tree'].includes(k)&&!e.color?palette[0]:col?cm(val(r,col)):palette[0];
  const extent=(ch:string)=>{const a=domain(ch).map(Number); let [lo,hi]=d3.extent(a) as [number,number]; if(lo===hi){lo-=1;hi+=1;} return [lo,hi] as [number,number];};
  const shared=options.sharedPosition;
@@ -252,7 +253,7 @@ export function renderBasis(chart:any,datasets:any[],frame:any,filters:any,appea
   const proj=projection.fitExtent([[4,4],[w-4,h-4]],geometry),gp=d3.geoPath(proj);
   plot.attr('data-geo-projection',cfg.geoProjection??'mercator').attr('data-geo-frame',JSON.stringify([frame.x+L,frame.y+T,w,h]));
   if(options.geoBackground!==false)plot.selectAll('path.land').data(geometry.features).join('path').attr('class','land').attr('d',gp as any).attr('fill','#edf1f3').attr('stroke','#d3dce1').attr('stroke-width',.5);
-  if(k==='geo_area') rows.forEach((r:any)=>{const f=geometry.features[Number(r._feature)%geometry.features.length];mark(path(gp(f),color(r),'white',.5),r);const p=gp.centroid(f);point(r,p[0],p[1]);});
+  if(k==='geo_area') rows.forEach((r:any)=>{const f=geometry.features[Number(r._feature)%geometry.features.length];mark(path(gp(f),color(r),'white',1.15),r);const p=gp.centroid(f);point(r,p[0],p[1]);});
   else if(k==='geo_point') rows.forEach((r:any)=>{const p=proj([num(r,'x'),num(r,'y')])!;circle(r,p[0],p[1],3);});
   else {for(let i=1;i<rows.length;i++){const a=rows[i-1],b=rows[i],p=proj([num(a,'x'),num(a,'y')])!,q=proj([num(b,'x'),num(b,'y')])!;mark(path(`M${p} L${q}`,'none',color(b),e['stroke.width']?1+num(b,'stroke.width')/Math.max(...domain('stroke.width').map(Number))*3:1.8),b);point(b,q[0],q[1]);}}
  } else throw new Error(`Unimplemented basis idiom: ${k}`);

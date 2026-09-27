@@ -90,7 +90,7 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
   if(k.startsWith('geo_')){o.geometry=geoGeometry;if(chosenGeo.projection)o.geoProjection=chosenGeo.projection;}
   cfg.set(c.chart_id,o);
   decisions.push({kind:'presentation',chart:c.chart_id,donut:k==='pie/donut/radial_bar'&&!e['position.radius']?o.donut:undefined,streamgraph:k==='stacked_area'?o.streamgraph:undefined,treeLayout:k==='tree'?o.treeLayout:undefined,treemapTile:k==='treemap'?o.treemapTile:undefined});
-  for(const [ch,f] of Object.entries(e))if(ch==='shape'||ch==='stroke.color'||ch.endsWith('_offset')||ch==='text'||ch==='color'&&!['rect_heatmap','calendar_heatmap','hexbin','geo_area'].includes(k))categorical.add(f);
+  for(const [ch,f] of Object.entries(e))if(ch==='shape'||ch==='stroke.color'||ch.endsWith('_offset')||ch==='text'||ch==='color'&&!['rect_heatmap','calendar_heatmap','hexbin'].includes(k))categorical.add(f);
   if(bars.includes(k)&&e[horizontal?'position.y':'position.x'])categorical.add(e[horizontal?'position.y':'position.x']);
   if(['rect_heatmap','calendar_heatmap','hexbin'].includes(k))for(const ch of ['position.x','position.y'])if(e[ch])categorical.add(e[ch]);
   if(k==='parallel_coordinates')categorical.add(e['position.x']);
