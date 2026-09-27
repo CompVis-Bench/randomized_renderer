@@ -45,7 +45,7 @@ export function validateAnnotation(a) {
  return a;
 }
 
-export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},geometry=null}={}) {
+export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},geometry=null,geometries=null}={}) {
  validateAnnotation(input);
  const policy={...defaultPolicy,...overrides};
  check(Object.keys(overrides).every(k=>k in defaultPolicy),'Unknown policy option');
@@ -54,6 +54,15 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
  check(Number.isInteger(seed)&&seed>=0&&seed<=0xffffffff,'seed must be a uint32');
  const random=rng(seed),pick=a=>a[Math.floor(random()*a.length)],integer=(min,max)=>min+Math.floor(random()*(max-min+1));
  const annotation=structuredClone(input), frozen=JSON.stringify(annotation),charts=annotation.charts;
+ // A scene gets one geography so point, line, and area layers share the same
+ // coordinate system. Callers may provide raw GeoJSON or named specs with a
+ // projection, which lets randomized browser scenes move between local,
+ // national, and other geographic sources.
+ const geoSpecs=(geometries??(geometry?[geometry]:[])).map(value=>value?.geometry?.type==='FeatureCollection'&&value?.geometry?.features
+  ? value : {geometry:value,projection:'mercator'});
+ const chosenGeo=charts.some(c=>c.variation.startsWith('geo_'))?pick(geoSpecs):null;
+ const geoGeometry=chosenGeo?.geometry;
+ if(charts.some(c=>c.variation.startsWith('geo_')))check(geoGeometry?.features?.length,'Geo charts require a non-empty GeoJSON FeatureCollection');
  const decisions=[],domains={},categorical=new Set(),rep=new Set(charts.flatMap(c=>c.external_encodings.position));
  // Keep field domains compact and chart appropriate. A shared field gets the
  // intersection of the ranges requested by every chart that uses it.
@@ -78,7 +87,7 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
   if(k==='euler_venn')check(e.color,`${c.chart_id}: Venn synthesis requires a color field`);
   const horizontal=!!e['position.y_offset']||bars.includes(k)&&!e['position.y'];
   const o={categoricalFields:[],repetitionFields:c.external_encodings.position,donut:random()<.5,barOrientation:horizontal?'horizontal':'vertical',axisOrientation:'vertical',streamgraph:k==='stacked_area'&&random()<.5,treeLayout:random()<.5?'tree':'cluster',treemapTile:pick(['squarify','binary','slice','dice']),linkSeed:Math.floor(random()*0xffffffff)};
-  if(k.startsWith('geo_')){check(geometry?.features?.length,`${c.chart_id}: supply local GeoJSON geometry`);o.geometry=geometry;}
+  if(k.startsWith('geo_')){o.geometry=geoGeometry;if(chosenGeo.projection)o.geoProjection=chosenGeo.projection;}
   cfg.set(c.chart_id,o);
   decisions.push({kind:'presentation',chart:c.chart_id,donut:k==='pie/donut/radial_bar'&&!e['position.radius']?o.donut:undefined,streamgraph:k==='stacked_area'?o.streamgraph:undefined,treeLayout:k==='tree'?o.treeLayout:undefined,treemapTile:k==='treemap'?o.treemapTile:undefined});
   for(const [ch,f] of Object.entries(e))if(ch==='shape'||ch==='stroke.color'||ch.endsWith('_offset')||ch==='text'||ch==='color'&&!['rect_heatmap','calendar_heatmap','hexbin','geo_area'].includes(k))categorical.add(f);
@@ -109,7 +118,7 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
  }
  for(const c of charts){const e=c.encodings;
   if(e.text)domains[e.text]=['Energy','Water','Forest','Climate','Urban','Soil','River','Ocean','Carbon','Solar','Wind','Rain'];
-  if(c.variation.startsWith('geo_')){const centers=geometry.features.map(geoCentroid);if(e['position.x'])domains[e['position.x']]=uniq(centers.map(p=>p[0]));if(e['position.y'])domains[e['position.y']]=uniq(centers.map(p=>p[1]));}
+  if(c.variation.startsWith('geo_')){const centers=geoGeometry.features.map(geoCentroid);if(e['position.x'])domains[e['position.x']]=uniq(centers.map(p=>p[0]));if(e['position.y'])domains[e['position.y']]=uniq(centers.map(p=>p[1]));}
   if(c.variation==='plain_area'&&e['position.y2']){check(e['position.y']!==e['position.y2'],'Area boundary fields must differ');domains[e['position.y2']]=domains[e['position.y']].map(v=>v+100);}
  }
  
@@ -192,7 +201,7 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
   for(const context of contexts){const values=f=>f?(f in context?[context[f]]:domains[f]):[1,2,3,4];
    const put=(v={},extra={})=>{check(++rowCount<=policy.maxRows,'Synthetic data exceeds maxRows');rows.push({...Object.fromEntries(fs.map(f=>[f,pick(values(f))])),...v,...context,...extra,_row:String(rows.length)});};
    if(hierarchy.includes(k)){for(let i=0;i<15;i++){const v={};if(e['position.x'])v[e['position.x']]=i+1;if(e['position.y'])v[e['position.y']]=Math.floor(Math.log2(i+1));if(e['position.radius'])v[e['position.radius']]=Math.floor(Math.log2(i+1));put(v,{_node:'n'+i,_parent:i?'n'+Math.floor((i-1)/2):'none'});}}
-   else if(k.startsWith('geo_'))geometry.features.forEach((f,i)=>{const p=geoCentroid(f);put({...e['position.x']?{[e['position.x']]:p[0]}:{},...e['position.y']?{[e['position.y']]:p[1]}:{}},{_feature:i});});
+   else if(k.startsWith('geo_'))geoGeometry.features.forEach((f,i)=>{const p=geoCentroid(f);put({...e['position.x']?{[e['position.x']]:p[0]}:{},...e['position.y']?{[e['position.y']]:p[1]}:{}},{_feature:i});});
    else if(k==='parallel_coordinates'){const dim=e[o.axisOrientation==='horizontal'?'position.y':'position.x'],value=e[o.axisOrientation==='horizontal'?'position.x':'position.y'];check(dim&&value,`${c.chart_id}: parallel coordinates need both axes`);o.parallelDimension=dim;o.parallelValue=value;o.parallelLineStyle=random()<.5?'straight':'bezier';for(let j=0;j<12;j++)for(const x of values(dim))put({[dim]:x,...e.color?{[e.color]:values(e.color)[j%values(e.color).length]}:{}},{_series:j});}
    else if(['rect_heatmap','calendar_heatmap','hexbin'].includes(k)){for(const x of values(e['position.x']))for(const y of values(e['position.y']))put({...e['position.x']?{[e['position.x']]:x}:{},...e['position.y']?{[e['position.y']]:y}:{}});}
    else if(['single_boxplot','multi_boxplot','violin'].includes(k)){for(const x of k==='single_boxplot'?[null]:values(e['position.x']))for(let j=0;j<40;j++)put(x===null?{}:{[e['position.x']]:x});}

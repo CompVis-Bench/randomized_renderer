@@ -2,6 +2,8 @@ import './style.css';
 import { buildRandomizedAnnotation, validateAnnotation } from '../offline/randomized-annotation.mjs';
 import { rng } from '../offline/randomized-browser-constants.mjs';
 import geometryText from '../offline/assets/manhattan.geojson?raw';
+import statesTopology from 'us-atlas/states-10m.json';
+import { feature } from 'topojson-client';
 import '../offline/renderer.ts';
 
 declare global { interface Window { offlineRenderer: { render(scene: any): string } } }
@@ -28,17 +30,29 @@ const TYPES: Record<string, Definition> = {
 const typeNames = Object.keys(TYPES);
 const $ = (id: string) => document.getElementById(id)!;
 const annotation = $('annotation') as HTMLTextAreaElement;
-const seed = $('seed') as HTMLInputElement;
-const geometry = JSON.parse(geometryText);
+const localGeometry = JSON.parse(geometryText);
+const statesFeatureCollection: any = feature(statesTopology as any, (statesTopology as any).objects.states as any);
+// Albers USA intentionally covers the 50 states and DC; atlas also contains
+// territories whose coordinates are outside this projection's supported zones.
+const statesGeometry: any = {
+  type: 'FeatureCollection',
+  features: statesFeatureCollection.features.filter((state: any) => Number(state.id) <= 56),
+};
+// Keep the local fixture for small city maps, and add US-wide and per-state
+// GeoJSON choices so repeated generations are not locked to one location.
+const geometryVariants: any[] = [
+  { id: 'manhattan', geometry: localGeometry, projection: 'mercator' },
+  { id: 'united-states', geometry: statesGeometry, projection: 'albersUsa' },
+  ...statesGeometry.features.map((state: any, index: number) => ({
+    id: `us-state-${state.id ?? index}`,
+    geometry: { type: 'FeatureCollection', features: [state] },
+    projection: 'albersUsa',
+  })),
+];
 const preview = $('preview');
 let currentSvg = '';
 
-function seedValue() {
-  const raw = seed.value.trim();
-  if (!raw) return Math.floor(Math.random() * 0x100000000);
-  if (!/^\d+$/.test(raw) || Number(raw) > 0xffffffff) throw new Error('Seed must be an integer from 0 to 4294967295');
-  return Number(raw);
-}
+function randomSeed() { return Math.floor(Math.random() * 0x100000000); }
 function integer(random: () => number, min: number, max: number) { return min + Math.floor(random() * (max - min + 1)); }
 function pick<T>(random: () => number, values: T[]) { return values[Math.floor(random() * values.length)]; }
 function parseOptionalInteger(id: string, min: number, max: number, label: string) {
@@ -104,9 +118,14 @@ function randomAnnotation(usedSeed: number) {
     else {
       const repeatedPairs = Array.from({ length: repeatedTargets.length }, (_, left) => repeatedTargets.slice(left + 1).map(right => [repeatedTargets[left].index, right.index] as [number, number])).flat();
       targets = repeatedPairs.length ? pick(random, repeatedPairs) : pick(random, Array.from({ length: count }, (_, left) => Array.from({ length: count - left - 1 }, (_, offset) => [left, left + offset + 1] as [number, number])).flat());
-      // A two-group link is always two repeated, unwrapped lists.
-      for (const index of targets) if (!repetitionMaps[index].length) repetitionMaps[index].push(`F${nextField++}`);
     }
+    // Links use one-dimensional lists. Trim generated nested repetition before
+    // adding the edge so random annotations always satisfy the link contract.
+    // The annotation contract applies this restriction to the whole scene,
+    // so unrelated charts are trimmed as well when a link is present.
+    for (let index = 0; index < repetitionMaps.length; index++) repetitionMaps[index] = repetitionMaps[index].slice(0, 1);
+    for (let index = 0; index < charts.length; index++) resultCharts[index].external_encodings.position = repetitionMaps[index];
+    for (const index of targets) if (!repetitionMaps[index].length) repetitionMaps[index].push(`F${nextField++}`);
     const linkEncodings: Record<string, string> = {};
     if (random() < .72) linkEncodings['stroke.color'] = `F${nextField++}`;
     if (random() < .72) linkEncodings['stroke.width'] = `F${nextField++}`;
@@ -125,17 +144,20 @@ function randomAnnotation(usedSeed: number) {
 function show(value: any) { annotation.value = JSON.stringify(value, null, 2); }
 function render() {
   const value = JSON.parse(annotation.value); validateAnnotation(value);
-  const usedSeed = seedValue(); const result = buildRandomizedAnnotation(value, { seed: usedSeed, geometry });
-  currentSvg = window.offlineRenderer.render(result.scene); preview.innerHTML = currentSvg;
-  const node = preview.querySelector('svg'); node?.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-  $('status').textContent = `Rendered · seed ${usedSeed} · ${result.scene.width} × ${result.scene.height}`;
+  const svgs = Array.from({ length: 4 }, () => {
+    const result = buildRandomizedAnnotation(value, { seed: randomSeed(), geometries: geometryVariants });
+    return window.offlineRenderer.render(result.scene);
+  });
+  currentSvg = svgs[0]; preview.innerHTML = svgs.join('');
+  preview.querySelectorAll('svg').forEach(node => node.setAttribute('preserveAspectRatio', 'xMidYMid meet'));
+  $('status').textContent = 'Rendered · 4 randomized SVG previews';
 }
 function download(name: string, type: string, text: string) { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([text], { type })); link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); }
-show({ charts: [{ chart_id: 'C1', variation: 'point', encodings: { 'position.x': 'F1', 'position.y': 'F2', color: 'F3' }, external_encodings: { position: [] } }] });
+const initial = randomAnnotation(randomSeed()); show(initial.result);
 $('mg-count').addEventListener('input', () => { $('mg-count-value').textContent = ($('mg-count') as HTMLInputElement).value; });
 $('sharing-count').addEventListener('input', () => { $('sharing-count-value').textContent = ($('sharing-count') as HTMLInputElement).value; });
-$('generate-annotation').onclick = () => { try { const usedSeed = seedValue(); const { result, sharingCount } = randomAnnotation(usedSeed); show(result); const mgCount = result.charts.filter(chart => chart.variation !== 'link').length; const linkCount = result.charts.filter(chart => chart.variation === 'link').length; $('status').textContent = `Schema-valid annotation · ${mgCount} MGs · ${sharingCount} shared fields${linkCount ? ' · 1 link' : ''} · seed ${usedSeed}`; } catch (error) { $('status').textContent = `Error: ${String(error).replace(/^Error: /, '')}`; } };
+$('generate-annotation').onclick = () => { try { const { result, sharingCount } = randomAnnotation(randomSeed()); show(result); const mgCount = result.charts.filter(chart => chart.variation !== 'link').length; const linkCount = result.charts.filter(chart => chart.variation === 'link').length; $('status').textContent = `Schema-valid annotation · ${mgCount} MGs · ${sharingCount} shared fields${linkCount ? ' · 1 link' : ''}`; } catch (error) { $('status').textContent = `Error: ${String(error).replace(/^Error: /, '')}`; } };
 $('render').onclick = () => { try { render(); } catch (error) { $('status').textContent = `Error: ${String(error).replace(/^Error: /, '')}`; } };
 $('format').onclick = () => { try { show(JSON.parse(annotation.value)); } catch (error) { $('status').textContent = `JSON error: ${String(error)}`; } };
 $('download-json').onclick = () => download('annotation.json', 'application/json', annotation.value);
-$('download-svg').onclick = () => { if (currentSvg) download(`randomized-${seed.value || 'svg'}.svg`, 'image/svg+xml', currentSvg); };
+$('download-svg').onclick = () => { if (currentSvg) download('randomized-preview.svg', 'image/svg+xml', currentSvg); };

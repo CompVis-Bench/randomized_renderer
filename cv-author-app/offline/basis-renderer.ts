@@ -248,8 +248,9 @@ export function renderBasis(chart:any,datasets:any[],frame:any,filters:any,appea
  } else if(k.startsWith('geo_')) {
   const geometry=structuredClone(cfg.geometry);if(!geometry)throw new Error('Missing offline geometry');
   for(const f of geometry.features){if(d3.geoArea(f)>2*Math.PI){const pp=f.geometry.type==='Polygon'?[f.geometry.coordinates]:f.geometry.coordinates;pp.forEach((p:any)=>p.forEach((ring:any)=>ring.reverse()));}}
-  const proj=d3.geoMercator().fitExtent([[4,4],[w-4,h-4]],geometry),gp=d3.geoPath(proj);
-  plot.attr('data-geo-projection','mercator').attr('data-geo-frame',JSON.stringify([frame.x+L,frame.y+T,w,h]));
+  const projection=cfg.geoProjection==='albersUsa'?d3.geoAlbersUsa():d3.geoMercator();
+  const proj=projection.fitExtent([[4,4],[w-4,h-4]],geometry),gp=d3.geoPath(proj);
+  plot.attr('data-geo-projection',cfg.geoProjection??'mercator').attr('data-geo-frame',JSON.stringify([frame.x+L,frame.y+T,w,h]));
   if(options.geoBackground!==false)plot.selectAll('path.land').data(geometry.features).join('path').attr('class','land').attr('d',gp as any).attr('fill','#edf1f3').attr('stroke','#d3dce1').attr('stroke-width',.5);
   if(k==='geo_area') rows.forEach((r:any)=>{const f=geometry.features[Number(r._feature)%geometry.features.length];mark(path(gp(f),color(r),'white',.5),r);const p=gp.centroid(f);point(r,p[0],p[1]);});
   else if(k==='geo_point') rows.forEach((r:any)=>{const p=proj([num(r,'x'),num(r,'y')])!;circle(r,p[0],p[1],3);});

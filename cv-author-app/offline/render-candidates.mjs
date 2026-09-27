@@ -4,6 +4,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createHash} from 'node:crypto';
 import {parseArgs} from 'node:util';
+import {feature} from 'topojson-client';
 import {buildRandomizedAnnotation} from './randomized-annotation.mjs';
 import {createRenderer} from './render.mjs';
 const hash=b=>createHash('sha256').update(b).digest('hex');
@@ -23,12 +24,19 @@ export async function main(args=process.argv.slice(2)){
  let existing;try{existing=await readdir(out);}catch(e){if(e.code!=='ENOENT')throw e;}
  if(existing?.length)throw new Error('Output directory must be empty');
  const policy=v.policy?JSON.parse(await readFile(v.policy,'utf8')):{};
- const geometry=JSON.parse(await readFile(v.geometry??new URL('./assets/manhattan.geojson',import.meta.url),'utf8'));
+ const localGeometry=JSON.parse(await readFile(v.geometry??new URL('./assets/manhattan.geojson',import.meta.url),'utf8'));
+ let geometries=[localGeometry];
+ if(!v.geometry){
+  const statesTopo=JSON.parse(await readFile(new URL('../node_modules/us-atlas/states-10m.json',import.meta.url),'utf8'));
+  const stateFeatures=feature(statesTopo,statesTopo.objects.states).features.filter(state=>Number(state.id)<=56);
+  const states={type:'FeatureCollection',features:stateFeatures};
+  geometries=[{geometry:localGeometry,projection:'mercator'},{geometry:states,projection:'albersUsa'},...states.features.map(state=>({geometry:{type:'FeatureCollection',features:[state]},projection:'albersUsa'}))];
+ }
  const jobs=[];
  // Preflight all annotations before creating candidate files or launching Chromium.
  for(const file of files){const bytes=await readFile(file),id=path.basename(file).replace(/(?:\.annotation)?\.json$/,'');if(!/^[a-zA-Z0-9_.-]+$/.test(id))throw new Error('Unsafe sample filename: '+id);
   const sampleSeed=(seed^parseInt(hash(Buffer.from(id)).slice(0,8),16))>>>0;
-  try{buildRandomizedAnnotation(JSON.parse(bytes),{seed:sampleSeed,policy,geometry});jobs.push({id,file,bytes,inputHash:hash(bytes),seed:sampleSeed});}catch(e){throw new Error(`${file}: ${e.message}`);}
+  try{buildRandomizedAnnotation(JSON.parse(bytes),{seed:sampleSeed,policy,geometries});jobs.push({id,file,bytes,inputHash:hash(bytes),seed:sampleSeed});}catch(e){throw new Error(`${file}: ${e.message}`);}
  }
  if(new Set(jobs.map(j=>j.id)).size!==jobs.length)throw new Error('Duplicate sample names');
  for(const name of ['images','annotations','construction'])await mkdir(path.join(out,name),{recursive:true});
@@ -36,7 +44,7 @@ export async function main(args=process.argv.slice(2)){
  let renderer;
  try{
   if(!v['plan-only'])renderer=await createRenderer();
-  for(const source of jobs){const job={...source,...buildRandomizedAnnotation(JSON.parse(source.bytes),{seed:source.seed,policy,geometry})};const before=json(job.annotation),image='images/'+job.id+'.png',annotation='annotations/'+job.id+'.json';
+  for(const source of jobs){const job={...source,...buildRandomizedAnnotation(JSON.parse(source.bytes),{seed:source.seed,policy,geometries})};const before=json(job.annotation),image='images/'+job.id+'.png',annotation='annotations/'+job.id+'.json';
    let rendered;if(renderer)rendered=await renderer.render(job.scene); // exactly one rasterization
    if(json(job.annotation)!==before)throw new Error('Renderer changed annotation');
    if(rendered){await writeFile(path.join(out,image),rendered.png,{flag:'wx'});await writeFile(path.join(out,'construction',job.id+'.svg'),rendered.svg,{flag:'wx'});}
