@@ -18,12 +18,12 @@ export const defaultPolicy = Object.freeze({layerProbability:.5,nestedProbabilit
 // for the curves and small enough that the groups still read as one layout.
 export const linkGroupGap = 96;
 export function preferredChartSize(variation){
- if(['pie/donut/radial_bar','single_radar','multi_radar','radial_area'].includes(variation))return [360,360];
- if(variation==='parallel_coordinates')return [640,360];
- if(['rect_heatmap','calendar_heatmap','hexbin'].includes(variation))return [400,340];
- if(['single_boxplot','multi_boxplot','violin'].includes(variation))return [400,300];
- if(['tree','dendrogram','radial_tree','treemap','circlepacking','sunburst','icicle'].includes(variation))return [480,360];
- return [420,300];
+ if(['pie/donut/radial_bar','single_radar','multi_radar','radial_area'].includes(variation))return [340,340];
+ if(variation==='parallel_coordinates')return [560,320];
+ if(['rect_heatmap','calendar_heatmap','hexbin'].includes(variation))return [360,320];
+ if(['single_boxplot','multi_boxplot','violin'].includes(variation))return [360,300];
+ if(['tree','dendrogram','radial_tree','treemap','circlepacking','sunburst','icicle'].includes(variation))return [400,320];
+ return [360,300];
 }
 
 export function validateAnnotation(a) {
@@ -153,7 +153,17 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
    if(!paired)out.push({...a,node:a.reps.reduceRight((n,f)=>repeat(f,n),a.node),reps:[]});
   }
   if(out.length===1)return out[0].node;
-  const direction=linkDirection??(random()<.5?'horizontal':'vertical');
+  if(!linkDirection&&out.length>=3){
+   // Pack independent views into a near-square grid so a collection of charts
+   // does not become a very wide or very tall strip.
+   const columns=Math.ceil(Math.sqrt(out.length)),rows=[];
+   for(let i=0;i<out.length;i+=columns){
+    const children=out.slice(i,i+columns).map(n=>n.node);
+    rows.push(children.length===1?children:{type:'concat',direction:'horizontal',gap:28,children,weights:children.map(()=>1)});
+   }
+   return {type:'concat',direction:'vertical',gap:28,children:rows,weights:rows.map(()=>1)};
+  }
+  const direction=linkDirection??'vertical';
   return {type:'concat',direction,gap:compositionGap,children:out.map(n=>n.node),weights:out.map(()=>.8+random()*.4)};
  }
  function repeat(field,child){
