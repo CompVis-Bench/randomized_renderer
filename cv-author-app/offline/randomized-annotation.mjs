@@ -14,6 +14,9 @@ const hierarchy = ['tree','radial_tree','treemap','circlepacking','sunburst','ic
 const fields = c => uniq([...Object.values(c.encodings), ...c.external_encodings.position, ...['size','color'].map(k=>c.external_encodings[k]).filter(Boolean)]);
 const positions = c => uniq(['x','y','theta','radius'].map(k=>c.encodings['position.'+k]).filter(Boolean));
 export const defaultPolicy = Object.freeze({layerProbability:.5,nestedProbability:.5,minRepetitions:2,maxRepetitions:6,maxInstances:512,maxRows:150000,maxPixels:60000000});
+// Paired link groups need a visible connection corridor. Keep it large enough
+// for the curves and small enough that the groups still read as one layout.
+export const linkGroupGap = 96;
 
 export function validateAnnotation(a) {
  check(a && Object.keys(a).join(',')==='charts' && Array.isArray(a.charts) && a.charts.length>0 && a.charts.length<=64,'Expected v5 {charts:[...]} with 1–64 templates');
@@ -108,6 +111,7 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
  const linkRank=new Map(linkOrder.map((id,i)=>[id,i]));
  const doubleLinkTargets=new Set(charts.filter(c=>c.variation==='link'&&c.link_targets?.length===2).flatMap(c=>c.link_targets));
  const linkDirection=doubleLinkTargets.size?(random()<.5?'horizontal':'vertical'):undefined;
+ const compositionGap=doubleLinkTargets.size?linkGroupGap:28;
  const containsNode=(node,id)=>typeof node==='string'?node===id:node?.node?containsNode(node.node,id):node?.child?containsNode(node.child,id):node?.children?.some(child=>containsNode(child,id));
  const nodes=charts.filter(c=>c.variation!=='link').map(c=>({node:c.chart_id,reps:[...remaining(c)],ids:[c.chart_id]}));
  nodes.sort((a,b)=>(linkRank.get(a.node)??linkOrder.length)-(linkRank.get(b.node)??linkOrder.length));
@@ -142,7 +146,7 @@ export function buildRandomizedAnnotation(input, {seed=23,policy:overrides={},ge
   }
   if(out.length===1)return out[0].node;
   const direction=linkDirection??(random()<.5?'horizontal':'vertical');
-  return {type:'concat',direction,gap:28,children:out.map(n=>n.node),weights:out.map(()=>.8+random()*.4)};
+  return {type:'concat',direction,gap:compositionGap,children:out.map(n=>n.node),weights:out.map(()=>.8+random()*.4)};
  }
  function repeat(field,child){
   const layout=facetLayout(domains[field].length,random);

@@ -1,5 +1,6 @@
 import {linkSeed,shuffled} from './link-variation.mjs';
 export const listLinkRevision='rmg-list-links-v2-20260925';
+export const linkGroupGap=96;
 const uniq=a=>[...new Set(a)];
 export function listCandidates({annotation:a,plan:p}){
  const charts=a.charts.filter(c=>c.variation!=='link'),out=[];
@@ -71,7 +72,7 @@ export function applyListLinks(job,{enabled=false,orientation='left-right',pair}
   p.datasets.push(ds);a.charts.push({chart_id:id,variation:'link',encodings:{source,target,'stroke.width':weight},repetition_position:[],link_targets:[g.id,h.id]});
   const cfg={revision:listLinkRevision,relation:'rmg-rmg',style:'bezier',layout:'paired-lists',orientation,source:'_link_source',target:'_link_target',widthField:weight,widthDomain:[12,96],materialized:true};
   p.charts.push({id,datasetId:ds.id,basis:{categoricalFields:[source,target],repetitionFields:[],link:cfg}});
-  const vertical=orientation==='left-right',count=Math.max(g.values.length,h.values.length),gap=320;
+  const vertical=orientation==='left-right',count=Math.max(g.values.length,h.values.length),gap=linkGroupGap;
   const lists=pair.map(v=>({...v.node,columns:vertical?1:v.values.length,flow:'row',wrap:false,gap:24,labelHeight:24,border:true}));
   const panel={type:'concat',direction:vertical?'horizontal':'vertical',gap,weights:[1,1],children:lists};
   const rest=pruneListComposition(p.composition,new Set([g.id,h.id]));
